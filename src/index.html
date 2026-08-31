@@ -104,8 +104,8 @@
     </div>
     <div class="spacer" data-tauri-drag-region></div>
     <div class="vers" data-tauri-drag-region>
-      <span class="ver" data-tauri-drag-region>当前 <b id="cur" data-tauri-drag-region>…</b></span>
-      <span class="ver" data-tauri-drag-region>最新 <b id="lat" data-tauri-drag-region>…</b></span>
+      <span class="ver" data-tauri-drag-region><span id="curLabel" data-tauri-drag-region>当前</span> <b id="cur" data-tauri-drag-region>…</b></span>
+      <span class="ver" data-tauri-drag-region><span id="latLabel" data-tauri-drag-region>最新</span> <b id="lat" data-tauri-drag-region>…</b></span>
     </div>
     <button id="btn" disabled>检查中…</button>
     <div class="winbtns">
@@ -118,6 +118,40 @@
       const appWindow = window.__TAURI__.window.getCurrentWindow();
       const $ = (id) => document.getElementById(id);
 
+      // 界面语言跟随系统语言（仅中/英）
+      const zh = (navigator.language || "en").toLowerCase().startsWith("zh");
+      document.documentElement.lang = zh ? "zh-CN" : "en";
+      const T = zh
+        ? {
+            current: "当前",
+            latest: "最新",
+            checking: "检查中…",
+            retry: "重试",
+            uptodate: "已是最新",
+            updating: "更新中…",
+            updateFailed: "更新失败，重试",
+            notInstalled: "未安装",
+            unknown: "未知",
+            minimize: "最小化",
+            maximize: "最大化/还原",
+            close: "关闭",
+          }
+        : {
+            current: "Current",
+            latest: "Latest",
+            checking: "Checking…",
+            retry: "Retry",
+            uptodate: "Up to date",
+            updating: "Updating…",
+            updateFailed: "Update failed, retry",
+            notInstalled: "Not installed",
+            unknown: "Unknown",
+            minimize: "Minimize",
+            maximize: "Maximize/Restore",
+            close: "Close",
+          };
+      const updateTo = (v) => (zh ? "更新到 v" + v : "Update to v" + v);
+
       // 窗口控制
       $("minBtn").onclick = () => appWindow.minimize();
       $("maxBtn").onclick = () => appWindow.toggleMaximize();
@@ -127,7 +161,7 @@
         const btn = $("btn");
         btn.className = "";
         btn.disabled = true;
-        btn.textContent = "检查中…";
+        btn.textContent = T.checking;
         btn.onclick = null;
         let info;
         try {
@@ -135,30 +169,30 @@
         } catch (e) {
           $("cur").textContent = "?";
           $("lat").textContent = "?";
-          btn.textContent = "重试";
+          btn.textContent = T.retry;
           btn.disabled = false;
           btn.onclick = refresh;
           return;
         }
-        $("cur").textContent = info.current ? "v" + info.current : "未安装";
-        $("lat").textContent = info.latest ? "v" + info.latest : "未知";
+        $("cur").textContent = info.current ? "v" + info.current : T.notInstalled;
+        $("lat").textContent = info.latest ? "v" + info.latest : T.unknown;
         if (!info.current) {
           btn.style.display = "none"; // 未安装时安装走内容区安装界面
           return;
         }
         btn.style.display = "";
         if (!info.latest) {
-          btn.textContent = "重试";
+          btn.textContent = T.retry;
           btn.disabled = false;
           btn.onclick = refresh;
           return;
         }
         if (info.current === info.latest) {
-          btn.textContent = "已是最新";
+          btn.textContent = T.uptodate;
           btn.disabled = true;
           return;
         }
-        btn.textContent = "更新到 v" + info.latest;
+        btn.textContent = updateTo(info.latest);
         btn.disabled = false;
         btn.onclick = doUpdate;
       }
@@ -166,20 +200,28 @@
       async function doUpdate() {
         const btn = $("btn");
         btn.disabled = true;
-        btn.textContent = "更新中…";
+        btn.textContent = T.updating;
         try {
           await invoke("do_update");
           await refresh();
         } catch (e) {
           btn.className = "err";
-          btn.textContent = "更新失败，重试";
+          btn.textContent = T.updateFailed;
           btn.disabled = false;
           btn.onclick = doUpdate;
           console.error(e);
         }
       }
 
-      window.addEventListener("DOMContentLoaded", refresh);
+      window.addEventListener("DOMContentLoaded", () => {
+        document.title = "Kimi Code WebUI Desktop";
+        $("curLabel").textContent = T.current;
+        $("latLabel").textContent = T.latest;
+        $("minBtn").title = T.minimize;
+        $("maxBtn").title = T.maximize;
+        $("closeBtn").title = T.close;
+        refresh();
+      });
     </script>
   </body>
 </html>

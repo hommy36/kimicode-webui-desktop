@@ -97,8 +97,8 @@
     </div>
     <div id="error"></div>
     <div id="install">
-      <h2>未检测到 Kimi Code CLI</h2>
-      <p>
+      <h2 id="installTitle">未检测到 Kimi Code CLI</h2>
+      <p id="installDesc">
         本应用需要本机安装 Kimi Code CLI（kimi）才能运行。<br />
         点击下方按钮将通过官方安装脚本自动安装。
       </p>
@@ -109,22 +109,90 @@
       const { invoke } = window.__TAURI__.core;
       const $ = (id) => document.getElementById(id);
 
-      // Rust 端调用：显示加载状态
-      window.showStatus = function (msg) {
+      // 界面语言跟随系统语言（仅中/英）
+      const zh = (navigator.language || "en").toLowerCase().startsWith("zh");
+      document.documentElement.lang = zh ? "zh-CN" : "en";
+      const T = zh
+        ? {
+            connecting: "正在连接 Kimi Code 服务…",
+            starting: "正在启动 Kimi Code 服务…",
+            waiting: "等待服务就绪…",
+            updating: "正在更新 Kimi Code CLI（服务将短暂中断）…",
+            errorTitle: "出错了",
+            installTitle: "未检测到 Kimi Code CLI",
+            installDesc:
+              "本应用需要本机安装 Kimi Code CLI（kimi）才能运行。<br />点击下方按钮将通过官方安装脚本自动安装。",
+            installBtn: "安装 Kimi Code",
+            installing: "正在安装…（需下载约 150MB，可能需要几分钟，请勿关闭窗口）",
+            installDone: "安装完成，正在启动…",
+            installFailed: "安装失败：",
+            err: {
+              no_cli: "未检测到 Kimi Code CLI",
+              install_verify_failed: "安装脚本已执行，但仍未找到 kimi，请重启应用或到官网手动安装",
+              cmd_failed: "命令执行失败",
+              no_home: "无法确定用户主目录（USERPROFILE/HOME 均未设置）",
+              no_port: "分配本地端口失败",
+              spawn_failed: "启动 kimi web 失败",
+              server_exited: "kimi web 进程异常退出",
+              token_timeout: "等待服务 token 生成超时",
+              ready_timeout: "等待服务就绪超时",
+              no_webview: "content webview 不存在",
+              nav_failed: "导航到 WebUI 失败",
+              update_verify: "更新完成，但读取新版本号失败",
+            },
+          }
+        : {
+            connecting: "Connecting to Kimi Code service…",
+            starting: "Starting Kimi Code service…",
+            waiting: "Waiting for the service to be ready…",
+            updating: "Updating Kimi Code CLI (service will be briefly unavailable)…",
+            errorTitle: "Something went wrong",
+            installTitle: "Kimi Code CLI not detected",
+            installDesc:
+              "This app requires the Kimi Code CLI (kimi) installed on this machine.<br />Click the button below to install it via the official install script.",
+            installBtn: "Install Kimi Code",
+            installing: "Installing… (about 150MB to download; this may take a few minutes — do not close the window)",
+            installDone: "Installation complete, starting…",
+            installFailed: "Installation failed: ",
+            err: {
+              no_cli: "Kimi Code CLI not detected",
+              install_verify_failed: "The install script ran, but kimi was still not found. Please restart the app or install it manually from the official site",
+              cmd_failed: "Command failed",
+              no_home: "Cannot determine the user home directory (neither USERPROFILE nor HOME is set)",
+              no_port: "Failed to allocate a local port",
+              spawn_failed: "Failed to start kimi web",
+              server_exited: "The kimi web process exited unexpectedly",
+              token_timeout: "Timed out waiting for the service token",
+              ready_timeout: "Timed out waiting for the service to be ready",
+              no_webview: "The content webview does not exist",
+              nav_failed: "Failed to navigate to the WebUI",
+              update_verify: "Update finished, but reading the new version failed",
+            },
+          };
+
+      // 静态文案
+      document.title = "Kimi Code WebUI Desktop";
+      $("status").textContent = T.connecting;
+      $("installTitle").textContent = T.installTitle;
+      $("installDesc").innerHTML = T.installDesc;
+      $("installBtn").textContent = T.installBtn;
+
+      // Rust 端调用：显示加载状态（key 由前端按系统语言翻译）
+      window.showStatus = function (key) {
         $("install").style.display = "none";
         $("loading").style.display = "flex";
         $("spinner").style.display = "block";
         $("error").style.display = "none";
-        $("status").textContent = msg;
+        $("status").textContent = T[key] || key;
       };
-      // Rust 端调用：显示错误
-      window.showError = function (msg) {
+      // Rust 端调用：显示错误（key 由前端翻译，detail 为原始技术细节）
+      window.showError = function (key, detail) {
         $("install").style.display = "none";
         $("loading").style.display = "flex";
         $("spinner").style.display = "none";
-        $("status").textContent = "出错了";
+        $("status").textContent = T.errorTitle;
         $("error").style.display = "block";
-        $("error").textContent = msg;
+        $("error").textContent = (T.err[key] || key) + (detail ? "\n" + detail : "");
       };
       // Rust 端调用：进入安装界面
       window.showInstall = function () {
@@ -136,14 +204,15 @@
       $("installBtn").onclick = async function () {
         const btn = $("installBtn");
         btn.disabled = true;
-        $("installMsg").textContent =
-          "正在安装…（需下载约 150MB，可能需要几分钟，请勿关闭窗口）";
+        $("installMsg").textContent = T.installing;
         try {
           await invoke("install_kimi");
-          $("installMsg").textContent = "安装完成，正在启动…";
+          $("installMsg").textContent = T.installDone;
         } catch (e) {
           btn.disabled = false;
-          $("installMsg").textContent = "安装失败：" + e;
+          const [k, d] = String(e).split("|");
+          $("installMsg").textContent =
+            T.installFailed + (T.err[k] || k) + (d ? " (" + d + ")" : "");
         }
       };
     </script>

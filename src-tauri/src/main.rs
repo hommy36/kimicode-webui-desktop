@@ -113,10 +113,10 @@ fn do_update(app: AppHandle) -> Result<String, String> {
         let _ = c.navigate(MAIN_HTML_URL.parse().unwrap());
     }
     std::thread::sleep(Duration::from_millis(800));
-    show_status_on(&app, "正在更新 Kimi Code CLI（服务将短暂中断）…");
+    show_status_on(&app, "updating");
     kill_server(&app);
 
-    let kimi = resolve_kimi().ok_or_else(|| "未检测到 Kimi Code CLI".to_string())?;
+    let kimi = resolve_kimi().ok_or_else(|| "no_cli|".to_string())?;
     let home = kimi_home()?;
     // 官方脚本安装（~/.kimi-code/bin 下）走安装脚本更新；npm 全局安装走 npm
     let native = kimi.starts_with(home.join("bin"))
@@ -128,14 +128,14 @@ fn do_update(app: AppHandle) -> Result<String, String> {
     }
 
     start_and_navigate(&app)?;
-    current_version().ok_or_else(|| "更新完成，但读取新版本号失败".to_string())
+    current_version().ok_or_else(|| "update_verify|".to_string())
 }
 
 #[tauri::command]
 fn install_kimi(app: AppHandle) -> Result<(), String> {
     run_powershell_install()?;
     if resolve_kimi().is_none() {
-        return Err("安装脚本已执行，但仍未找到 kimi，请重启应用或到官网手动安装".to_string());
+        return Err("install_verify_failed|".to_string());
     }
     start_and_navigate(&app)
 }
@@ -144,48 +144,48 @@ fn install_kimi(app: AppHandle) -> Result<(), String> {
 
 /// 启动 `kimi web` 并把内容区导航到带 token 的 WebUI 地址
 fn start_and_navigate(app: &AppHandle) -> Result<(), String> {
-    show_status_on(app, "正在启动 Kimi Code 服务…");
+    show_status_on(app, "starting");
     let home = kimi_home()?;
     let port = pick_free_port()?;
     let mut child = spawn_kimi_web(port)?;
 
     let token = read_token(&home, &mut child)?;
-    show_status_on(app, "等待服务就绪…");
+    show_status_on(app, "waiting");
     wait_until_ready(port, &mut child)?;
 
     app.state::<ServerChild>().0.lock().unwrap().replace(child);
     let url = format!("http://127.0.0.1:{port}/#token={token}");
     let content = app
         .get_webview(CONTENT_LABEL)
-        .ok_or_else(|| "content webview 不存在".to_string())?;
+        .ok_or_else(|| "no_webview|".to_string())?;
     content
         .navigate(url.parse().expect("invalid url"))
-        .map_err(|e| format!("导航到 WebUI 失败: {e}"))
+        .map_err(|e| format!("nav_failed|{e}"))
 }
 
 fn run_powershell_install() -> Result<(), String> {
     let mut cmd = Command::new("powershell");
     cmd.args(["-NoProfile", "-Command", INSTALL_PS_CMD]);
-    run_long(&mut cmd, "官方安装脚本")
+    run_long(&mut cmd, "install script")
 }
 
 fn run_npm_update() -> Result<(), String> {
     let mut cmd = Command::new("npm.cmd");
     cmd.args(["install", "-g", "@moonshot-ai/kimi-code@latest"]);
-    run_long(&mut cmd, "npm 更新")
+    run_long(&mut cmd, "npm update")
 }
 
 fn run_long(cmd: &mut Command, what: &str) -> Result<(), String> {
     no_window(cmd);
     let out = cmd
         .output()
-        .map_err(|e| format!("执行{what}失败: {e}"))?;
+        .map_err(|e| format!("cmd_failed|{what}: {e}"))?;
     if out.status.success() {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
     let tail: String = stderr.chars().take(300).collect();
-    Err(format!("{what}执行失败（{}）: {tail}", out.status))
+    Err(format!("cmd_failed|{what} ({}): {tail}", out.status))
 }
 
 // ---------- kimi CLI 探测与版本 ----------
@@ -262,7 +262,7 @@ fn kimi_home() -> Result<PathBuf, String> {
     }
     let home = env::var_os("USERPROFILE")
         .or_else(|| env::var_os("HOME"))
-        .ok_or_else(|| "无法确定用户主目录（USERPROFILE/HOME 均未设置）".to_string())?;
+        .ok_or_else(|| "no_home|".to_string())?;
     Ok(PathBuf::from(home).join(".kimi-code"))
 }
 
@@ -276,19 +276,18 @@ fn pick_free_port() -> Result<u16, String> {
     }
     TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr().map(|a| a.port()))
-        .map_err(|e| format!("分配本地端口失败: {e}"))
+        .map_err(|e| format!("no_port|{e}"))
 }
 
 fn spawn_kimi_web(port: u16) -> Result<Child, String> {
-    let kimi = resolve_kimi()
-        .ok_or_else(|| "未检测到 Kimi Code CLI（kimi）。请先安装：https://www.kimi.com/code/docs/en/".to_string())?;
+    let kimi = resolve_kimi().ok_or_else(|| "no_cli|".to_string())?;
     let mut cmd = Command::new(kimi);
     cmd.args(["web", "--no-open", "--port", &port.to_string()])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     no_window(&mut cmd);
-    cmd.spawn().map_err(|e| format!("启动 kimi web 失败: {e}"))
+    cmd.spawn().map_err(|e| format!("spawn_failed|{e}"))
 }
 
 /// 轮询读取 <home>/server.token（首次运行时文件可能尚未生成）
@@ -300,12 +299,12 @@ fn read_token(home: &Path, child: &mut Child) -> Result<String, String> {
             Ok(s) if !s.trim().is_empty() => return Ok(s.trim().to_string()),
             _ => {
                 if let Some(status) = child.try_wait().ok().flatten() {
-                    return Err(format!("kimi web 进程异常退出（{status}），无法获取 token"));
+                    return Err(format!("server_exited|{status}"));
                 }
                 if Instant::now() > deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(format!("等待 {} 生成超时", path.display()));
+                    return Err(format!("token_timeout|{}", path.display()));
                 }
                 std::thread::sleep(Duration::from_millis(200));
             }
@@ -322,12 +321,12 @@ fn wait_until_ready(port: u16, child: &mut Child) -> Result<(), String> {
             return Ok(());
         }
         if let Some(status) = child.try_wait().ok().flatten() {
-            return Err(format!("kimi web 进程异常退出（{status}），服务未就绪"));
+            return Err(format!("server_exited|{status}"));
         }
         if Instant::now() > deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("等待 kimi web 监听 {addr} 超时"));
+            return Err(format!("ready_timeout|{addr}"));
         }
         std::thread::sleep(Duration::from_millis(200));
     }
@@ -355,15 +354,18 @@ fn no_window(cmd: &mut Command) {
     }
 }
 
-fn show_status_on(app: &AppHandle, msg: &str) {
+/// 状态以 i18n key 发送，由前端按系统语言翻译
+fn show_status_on(app: &AppHandle, key: &str) {
     if let Some(c) = app.get_webview(CONTENT_LABEL) {
-        eval_with_retry(&c, &format!("showStatus({msg:?})"));
+        eval_with_retry(&c, &format!("showStatus({key:?})"));
     }
 }
 
+/// 错误以 `key|detail` 编码：key 由前端按系统语言翻译，detail 为原始技术细节
 fn show_error_on(app: &AppHandle, msg: &str) {
     if let Some(c) = app.get_webview(CONTENT_LABEL) {
-        eval_with_retry(&c, &format!("showError({msg:?})"));
+        let (key, detail) = msg.split_once('|').unwrap_or((msg, ""));
+        eval_with_retry(&c, &format!("showError({key:?}, {detail:?})"));
     }
 }
 
