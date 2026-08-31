@@ -13,7 +13,7 @@ use tauri::{
     WebviewBuilder, WebviewUrl, Window, WindowEvent,
 };
 
-const TOPBAR_HEIGHT: f64 = 48.0;
+const TOPBAR_HEIGHT: f64 = 40.0;
 const CONTENT_LABEL: &str = "content";
 /// Windows 下 Tauri v2 的应用内页面地址（自定义协议映射为 http://tauri.localhost）
 const MAIN_HTML_URL: &str = "http://tauri.localhost/main.html";
@@ -47,6 +47,9 @@ fn main() {
                 PhysicalSize::new(1, 1),
             )?;
             layout_webviews(&window, size.width, size.height);
+            // 布局完成后再显示窗口，避免启动瞬间顶栏撑满全窗的闪烁
+            window.show()?;
+            let _ = window.set_focus();
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
