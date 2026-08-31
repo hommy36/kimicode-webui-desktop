@@ -4,7 +4,11 @@
 
 Unofficial desktop client for [Kimi Code](https://www.kimi.com/code) — wraps the Kimi Code WebUI into a native app with Tauri 2.
 
+**[⬇️ Download the latest release](https://github.com/hommy36/kimicode-webui-desktop/releases)**
+
 ![Screenshot](docs/screenshot.png)
+
+![Session view](docs/screenshot-session.png)
 
 ## Features
 

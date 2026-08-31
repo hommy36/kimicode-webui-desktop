@@ -4,7 +4,11 @@
 
 非官方的 [Kimi Code](https://www.kimi.com/code) 桌面客户端 —— 用 Tauri 2 把 Kimi Code 的 WebUI 包装成原生桌面应用。
 
+**[⬇️ 下载最新版本（Releases）](https://github.com/hommy36/kimicode-webui-desktop/releases)**
+
 ![截图](docs/screenshot.png)
+
+![会话界面](docs/screenshot-session.png)
 
 ## 功能
 
