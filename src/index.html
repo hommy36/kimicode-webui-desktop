@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kimi Code</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: stretch;
+        background: #1a1b1e;
+        color: #d4d4d4;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        user-select: none;
+        overflow: hidden;
+        border-bottom: 1px solid #2c2d31;
+        box-sizing: border-box;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-left: 14px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .brand img {
+        width: 22px;
+        height: 22px;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .vers {
+        display: flex;
+        align-items: center;
+      }
+      .ver {
+        font-size: 12px;
+        color: #9a9a9a;
+        margin-right: 12px;
+        white-space: nowrap;
+      }
+      .ver b {
+        color: #d4d4d4;
+        font-weight: 600;
+      }
+      #btn {
+        align-self: center;
+        margin-right: 8px;
+        padding: 4px 12px;
+        font-size: 12px;
+        color: #fff;
+        background: #2b6cb0;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #btn:hover:not(:disabled) {
+        background: #3182ce;
+      }
+      #btn:disabled {
+        background: #3c3c3c;
+        color: #8a8a8a;
+        cursor: default;
+      }
+      #btn.err {
+        background: #7a3535;
+        color: #f0928e;
+      }
+      /* 窗口控制按钮 */
+      .winbtns {
+        display: flex;
+        align-items: stretch;
+      }
+      .winbtn {
+        width: 46px;
+        border: none;
+        background: transparent;
+        color: #b0b0b0;
+        font-size: 12px;
+        font-family: "Segoe MDL2 Assets", "Segoe UI Symbol", sans-serif;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .winbtn:hover {
+        background: #3c3d42;
+      }
+      .winbtn.close:hover {
+        background: #e81123;
+        color: #fff;
+        /* 贴齐无边框窗口右上角的圆角 */
+        border-top-right-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand" data-tauri-drag-region>
+      <img src="logo.png" alt="" data-tauri-drag-region /><span data-tauri-drag-region>Kimi Code</span>
+    </div>
+    <div class="spacer" data-tauri-drag-region></div>
+    <div class="vers" data-tauri-drag-region>
+      <span class="ver" data-tauri-drag-region>当前 <b id="cur" data-tauri-drag-region>…</b></span>
+      <span class="ver" data-tauri-drag-region>最新 <b id="lat" data-tauri-drag-region>…</b></span>
+    </div>
+    <button id="btn" disabled>检查中…</button>
+    <div class="winbtns">
+      <button class="winbtn" id="minBtn" title="最小化">&#xE921;</button>
+      <button class="winbtn" id="maxBtn" title="最大化/还原">&#xE922;</button>
+      <button class="winbtn close" id="closeBtn" title="关闭">&#xE8BB;</button>
+    </div>
+    <script>
+      const { invoke } = window.__TAURI__.core;
+      const appWindow = window.__TAURI__.window.getCurrentWindow();
+      const $ = (id) => document.getElementById(id);
+
+      // 窗口控制
+      $("minBtn").onclick = () => appWindow.minimize();
+      $("maxBtn").onclick = () => appWindow.toggleMaximize();
+      $("closeBtn").onclick = () => appWindow.close();
+
+      async function refresh() {
+        const btn = $("btn");
+        btn.className = "";
+        btn.disabled = true;
+        btn.textContent = "检查中…";
+        btn.onclick = null;
+        let info;
+        try {
+          info = await invoke("get_version_info");
+        } catch (e) {
+          $("cur").textContent = "?";
+          $("lat").textContent = "?";
+          btn.textContent = "重试";
+          btn.disabled = false;
+          btn.onclick = refresh;
+          return;
+        }
+        $("cur").textContent = info.current ? "v" + info.current : "未安装";
+        $("lat").textContent = info.latest ? "v" + info.latest : "未知";
+        if (!info.current) {
+          btn.style.display = "none"; // 未安装时安装走内容区安装界面
+          return;
+        }
+        btn.style.display = "";
+        if (!info.latest) {
+          btn.textContent = "重试";
+          btn.disabled = false;
+          btn.onclick = refresh;
+          return;
+        }
+        if (info.current === info.latest) {
+          btn.textContent = "已是最新";
+          btn.disabled = true;
+          return;
+        }
+        btn.textContent = "更新到 v" + info.latest;
+        btn.disabled = false;
+        btn.onclick = doUpdate;
+      }
+
+      async function doUpdate() {
+        const btn = $("btn");
+        btn.disabled = true;
+        btn.textContent = "更新中…";
+        try {
+          await invoke("do_update");
+          await refresh();
+        } catch (e) {
+          btn.className = "err";
+          btn.textContent = "更新失败，重试";
+          btn.disabled = false;
+          btn.onclick = doUpdate;
+          console.error(e);
+        }
+      }
+
+      window.addEventListener("DOMContentLoaded", refresh);
+    </script>
+  </body>
+</html>

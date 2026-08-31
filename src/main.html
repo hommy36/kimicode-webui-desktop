@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kimi Code</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        background: #1a1b1e;
+        color: #d4d4d4;
+        user-select: none;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid #3c3c3c;
+        border-top-color: #4f9cf9;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        margin-bottom: 18px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #status {
+        font-size: 14px;
+        color: #9a9a9a;
+      }
+      #error {
+        display: none;
+        margin-top: 16px;
+        max-width: 80%;
+        padding: 12px 16px;
+        border: 1px solid #7a3535;
+        border-radius: 6px;
+        background: #2d1f1f;
+        color: #f0928e;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      #install {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        max-width: 420px;
+        text-align: center;
+      }
+      #install h2 {
+        margin: 0 0 10px;
+        font-size: 18px;
+      }
+      #install p {
+        margin: 0 0 20px;
+        font-size: 13px;
+        color: #9a9a9a;
+        line-height: 1.6;
+      }
+      #installBtn {
+        padding: 8px 24px;
+        font-size: 14px;
+        color: #fff;
+        background: #2b6cb0;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #installBtn:hover:not(:disabled) {
+        background: #3182ce;
+      }
+      #installBtn:disabled {
+        background: #3c3c3c;
+        color: #8a8a8a;
+        cursor: default;
+      }
+      #installMsg {
+        margin-top: 14px;
+        font-size: 12px;
+        color: #9a9a9a;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" style="display: flex; flex-direction: column; align-items: center">
+      <div class="spinner" id="spinner"></div>
+      <div id="status">正在连接 Kimi Code 服务…</div>
+    </div>
+    <div id="error"></div>
+    <div id="install">
+      <h2>未检测到 Kimi Code CLI</h2>
+      <p>
+        本应用需要本机安装 Kimi Code CLI（kimi）才能运行。<br />
+        点击下方按钮将通过官方安装脚本自动安装。
+      </p>
+      <button id="installBtn">安装 Kimi Code</button>
+      <div id="installMsg"></div>
+    </div>
+    <script>
+      const { invoke } = window.__TAURI__.core;
+      const $ = (id) => document.getElementById(id);
+
+      // Rust 端调用：显示加载状态
+      window.showStatus = function (msg) {
+        $("install").style.display = "none";
+        $("loading").style.display = "flex";
+        $("spinner").style.display = "block";
+        $("error").style.display = "none";
+        $("status").textContent = msg;
+      };
+      // Rust 端调用：显示错误
+      window.showError = function (msg) {
+        $("install").style.display = "none";
+        $("loading").style.display = "flex";
+        $("spinner").style.display = "none";
+        $("status").textContent = "出错了";
+        $("error").style.display = "block";
+        $("error").textContent = msg;
+      };
+      // Rust 端调用：进入安装界面
+      window.showInstall = function () {
+        $("loading").style.display = "none";
+        $("error").style.display = "none";
+        $("install").style.display = "flex";
+      };
+
+      $("installBtn").onclick = async function () {
+        const btn = $("installBtn");
+        btn.disabled = true;
+        $("installMsg").textContent =
+          "正在安装…（需下载约 150MB，可能需要几分钟，请勿关闭窗口）";
+        try {
+          await invoke("install_kimi");
+          $("installMsg").textContent = "安装完成，正在启动…";
+        } catch (e) {
+          btn.disabled = false;
+          $("installMsg").textContent = "安装失败：" + e;
+        }
+      };
+    </script>
+  </body>
+</html>
