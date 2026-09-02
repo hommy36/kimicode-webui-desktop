@@ -23,6 +23,11 @@ const INSTALL_PS_CMD: &str = "irm https://code.kimi.com/kimi-code/install.ps1 | 
 /// 应用独占启动的 `kimi web` 子进程
 struct ServerChild(Mutex<Option<Child>>);
 
+/// 内容区占位页（main.html）的实际地址。
+/// dev 模式下 tauri CLI 用内置静态服务器 serve frontendDist（并非 tauri.localhost），
+/// 硬编码协议地址在 dev 下会 404（asset not found），所以启动时从 webview 实际 URL 捕获。
+struct PlaceholderUrl(Mutex<String>);
+
 #[derive(Serialize)]
 struct VersionInfo {
     current: Option<String>,
@@ -32,6 +37,7 @@ struct VersionInfo {
 fn main() {
     tauri::Builder::default()
         .manage(ServerChild(Mutex::new(None)))
+        .manage(PlaceholderUrl(Mutex::new(MAIN_HTML_URL.to_string())))
         .invoke_handler(tauri::generate_handler![
             get_version_info,
             do_update,
@@ -53,6 +59,19 @@ fn main() {
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
+                // 等占位页 URL 提交后捕获真实地址（创建时 url() 可能还是 about:blank）
+                if let Some(content) = app_handle.get_webview(CONTENT_LABEL) {
+                    for _ in 0..50 {
+                        if let Ok(u) = content.url() {
+                            if u.as_str().contains("main.html") {
+                                *app_handle.state::<PlaceholderUrl>().0.lock().unwrap() =
+                                    u.to_string();
+                                break;
+                            }
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
                 if resolve_kimi().is_none() {
                     if let Some(content) = app_handle.get_webview(CONTENT_LABEL) {
                         eval_with_retry(&content, "showInstall()");
@@ -98,8 +117,12 @@ fn layout_webviews(window: &Window, w: u32, h: u32) {
 
 // ---------- Tauri 命令 ----------
 
+// 注意：所有命令必须是 async fn。同步命令在 Tauri 主线程上执行，
+// 而安装/版本检查要阻塞几分钟，会卡死主线程——自定义协议（tauri.localhost）
+// 的响应、窗口事件、关闭按钮全部排队，表现为"应用卡死 + WebUI 狂弹实时连接失败"。
+
 #[tauri::command]
-fn get_version_info() -> VersionInfo {
+async fn get_version_info() -> VersionInfo {
     VersionInfo {
         current: current_version(),
         latest: latest_version(),
@@ -107,12 +130,22 @@ fn get_version_info() -> VersionInfo {
 }
 
 #[tauri::command]
-fn do_update(app: AppHandle) -> Result<String, String> {
-    // 先回到本地占位页（更新期间 WebUI 会断开）
+async fn do_update(app: AppHandle) -> Result<String, String> {
+    // 先回到本地占位页，并确认它真的加载完再杀服务（否则旧 WebUI 会弹连接失败）
+    let placeholder = app.state::<PlaceholderUrl>().0.lock().unwrap().clone();
     if let Some(c) = app.get_webview(CONTENT_LABEL) {
-        let _ = c.navigate(MAIN_HTML_URL.parse().unwrap());
+        let _ = c.navigate(placeholder.parse().unwrap());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if c.url()
+                .map(|u| u.as_str().starts_with(&placeholder))
+                .unwrap_or(false)
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
-    std::thread::sleep(Duration::from_millis(800));
     show_status_on(&app, "updating");
     kill_server(&app);
 
@@ -122,7 +155,13 @@ fn do_update(app: AppHandle) -> Result<String, String> {
     let native = kimi.starts_with(home.join("bin"))
         || (kimi == PathBuf::from("kimi") && home.join("bin").join("kimi.exe").exists());
     if native {
-        run_powershell_install()?;
+        // KIMI_DESKTOP_FAKE_UPDATE=1：测试钩子，跳过真实下载，验证更新流程不卡 UI
+        if env::var_os("KIMI_DESKTOP_FAKE_UPDATE").is_some() {
+            show_status_on(&app, "updating");
+            std::thread::sleep(Duration::from_secs(8));
+        } else {
+            run_powershell_install()?;
+        }
     } else {
         run_npm_update()?;
     }
@@ -132,7 +171,7 @@ fn do_update(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn install_kimi(app: AppHandle) -> Result<(), String> {
+async fn install_kimi(app: AppHandle) -> Result<(), String> {
     run_powershell_install()?;
     if resolve_kimi().is_none() {
         return Err("install_verify_failed|".to_string());
@@ -238,6 +277,10 @@ fn current_version() -> Option<String> {
 
 /// 从 npm registry 查最新版本（用系统自带 curl.exe，不引入 HTTP 依赖）
 fn latest_version() -> Option<String> {
+    // KIMI_DESKTOP_FAKE_LATEST：测试钩子，伪装出新版本让更新按钮可点
+    if let Some(v) = env::var_os("KIMI_DESKTOP_FAKE_LATEST") {
+        return Some(v.to_string_lossy().to_string());
+    }
     let mut cmd = Command::new("curl.exe");
     cmd.args(["-s", "--max-time", "15", REGISTRY_LATEST_URL])
         .stdout(Stdio::piped())
