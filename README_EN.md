@@ -16,6 +16,7 @@ Unofficial desktop client for [Kimi Code](https://www.kimi.com/code) — wraps t
 - Custom frameless top bar: window dragging, minimize / maximize / close buttons
 - Shows the installed and latest CLI versions in the top bar, with one-click update
 - Guides you through installing the Kimi Code CLI via the official script when it's not detected
+- Remote control (LAN): enable it from the "Remote" page in the top bar, then scan the QR code to open the WebUI from your phone on the same WiFi (built on `kimi web`'s `--host 0.0.0.0` and bearer-token auth; the setting persists; a one-click button adds the firewall rule if the phone can't connect)
 - UI language follows the system language (Chinese / English; the WebUI itself is controlled by Kimi Code)
 
 ## Requirements

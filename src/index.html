@@ -46,7 +46,8 @@
         color: #d4d4d4;
         font-weight: 600;
       }
-      #btn {
+      #btn,
+      #remoteBtn {
         align-self: center;
         margin-right: 8px;
         padding: 4px 12px;
@@ -58,13 +59,21 @@
         cursor: pointer;
         white-space: nowrap;
       }
-      #btn:hover:not(:disabled) {
+      #btn:hover:not(:disabled),
+      #remoteBtn:hover:not(:disabled) {
         background: #3182ce;
       }
       #btn:disabled {
         background: #3c3c3c;
         color: #8a8a8a;
         cursor: default;
+      }
+      #remoteBtn {
+        background: #3c3d42;
+        color: #d4d4d4;
+      }
+      #remoteBtn:hover {
+        background: #4a4b51;
       }
       #btn.err {
         background: #7a3535;
@@ -108,6 +117,7 @@
       <span class="ver" data-tauri-drag-region><span id="latLabel" data-tauri-drag-region>最新</span> <b id="lat" data-tauri-drag-region>…</b></span>
     </div>
     <button id="btn" disabled>检查中…</button>
+    <button id="remoteBtn" title="远程控制">远程</button>
     <div class="winbtns">
       <button class="winbtn" id="minBtn" title="最小化">&#xE921;</button>
       <button class="winbtn" id="maxBtn" title="最大化/还原">&#xE922;</button>
@@ -132,6 +142,7 @@
             updateFailed: "更新失败，重试",
             notInstalled: "未安装",
             unknown: "未知",
+            remote: "远程",
             minimize: "最小化",
             maximize: "最大化/还原",
             close: "关闭",
@@ -146,6 +157,7 @@
             updateFailed: "Update failed, retry",
             notInstalled: "Not installed",
             unknown: "Unknown",
+            remote: "Remote",
             minimize: "Minimize",
             maximize: "Maximize/Restore",
             close: "Close",
@@ -156,6 +168,8 @@
       $("minBtn").onclick = () => appWindow.minimize();
       $("maxBtn").onclick = () => appWindow.toggleMaximize();
       $("closeBtn").onclick = () => appWindow.close();
+      // 远程控制设置页
+      $("remoteBtn").onclick = () => invoke("show_remote_page");
 
       async function refresh() {
         const btn = $("btn");
@@ -217,6 +231,8 @@
         document.title = "Kimi Code WebUI Desktop";
         $("curLabel").textContent = T.current;
         $("latLabel").textContent = T.latest;
+        $("remoteBtn").textContent = T.remote;
+        $("remoteBtn").title = T.remote;
         $("minBtn").title = T.minimize;
         $("maxBtn").title = T.maximize;
         $("closeBtn").title = T.close;
