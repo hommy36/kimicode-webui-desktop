@@ -19,6 +19,18 @@ Unofficial desktop client for [Kimi Code](https://www.kimi.com/code) — wraps t
 - Remote control (LAN): enable it from the "Remote" page in the top bar, then scan the QR code to open the WebUI from your phone on the same WiFi (built on `kimi web`'s `--host 0.0.0.0` and bearer-token auth; the setting persists; a one-click button adds the firewall rule if the phone can't connect)
 - UI language follows the system language (Chinese / English; the WebUI itself is controlled by Kimi Code)
 
+## Remote access beyond LAN (Tailscale)
+
+Campus and enterprise networks usually isolate clients from each other, so even devices on the same network can't connect. For true remote control over any network (4G, away from home):
+
+1. Install [Tailscale](https://tailscale.com) on both the computer and your phone (free)
+2. Sign in with the same account on both
+3. Enable remote access in the app, pick the `100.x` address in the IP dropdown, and scan the QR code — it works over any network
+
+Security model: WireGuard end-to-end encryption + Tailscale account admission + the token in the link.
+
+If you don't want to install anything, `cloudflared tunnel --url http://localhost:58627` gives you a temporary public URL instead (at your own risk of public exposure).
+
 ## Requirements
 
 - Windows

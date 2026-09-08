@@ -79,6 +79,17 @@
         flex-direction: column;
         align-items: center;
       }
+      #ipSel {
+        margin-bottom: 12px;
+        padding: 5px 10px;
+        font-size: 12px;
+        color: #d4d4d4;
+        background: #232428;
+        border: 1px solid #2c2d31;
+        border-radius: 5px;
+        outline: none;
+        max-width: 100%;
+      }
       #qr {
         background: #fff;
         border-radius: 8px;
@@ -130,11 +141,18 @@
       .btn.secondary:hover {
         background: #4a4b51;
       }
-      #hint {
+      #hint,
+      #tsHint {
         font-size: 12px;
         color: #8a8a8a;
         line-height: 1.7;
+      }
+      #hint {
+        margin-bottom: 8px;
+      }
+      #tsHint {
         margin-bottom: 22px;
+        color: #6b9fd4;
       }
       #err {
         font-size: 12px;
@@ -154,6 +172,7 @@
       </div>
       <div id="status"></div>
       <div id="remoteInfo">
+        <select id="ipSel"></select>
         <div id="qr"></div>
         <div id="urlRow">
           <div id="url"></div>
@@ -161,6 +180,7 @@
         </div>
       </div>
       <div id="hint"></div>
+      <div id="tsHint"></div>
       <div id="err"></div>
       <button class="btn secondary" id="fwBtn" style="display: none; margin-bottom: 14px">
         手机连不上？允许防火墙访问
@@ -189,6 +209,7 @@
             fwOk: "已允许，手机现在可以连接了",
             fwFail: "仍无法连通，请手动检查 Windows 防火墙",
             hint: "手机需与电脑连接同一 WiFi。链接内的 token 是唯一鉴权手段，谁拿到链接谁就能控制，请勿在公共网络开启。",
+            tsHint: "校园网通常开启客户端隔离，同网也连不上。跨网络远程（4G / 外地）：在电脑和手机上安装 Tailscale（tailscale.com）并登录同一账号，然后选择上方 100.x 开头的地址。",
           }
         : {
             title: "Remote Control (LAN)",
@@ -204,6 +225,7 @@
             fwOk: "Allowed. Your phone can connect now",
             fwFail: "Still unreachable. Please check Windows Firewall manually",
             hint: "Your phone must be on the same WiFi as this computer. The token in the link is the only credential — anyone with the link gets full control, so do not enable this on public networks.",
+            tsHint: "Campus networks usually isolate devices from each other. For remote access over any network (4G / away), install Tailscale (tailscale.com) on both this computer and your phone, sign in with the same account, then pick the 100.x address above.",
           };
 
       function render(st) {
@@ -213,6 +235,17 @@
         $("status").textContent = st.enabled ? T.on : T.off;
         if (st.enabled && st.url) {
           $("remoteInfo").style.display = "flex";
+          // 多网卡时允许切换生成链接的 IP（如 Tailscale 的 100.x）
+          const sel = $("ipSel");
+          sel.innerHTML = "";
+          for (const ip of st.ips) {
+            const o = document.createElement("option");
+            o.value = ip;
+            o.textContent = ip;
+            if (ip === st.ip) o.selected = true;
+            sel.appendChild(o);
+          }
+          sel.style.display = st.ips.length > 1 ? "" : "none";
           $("qr").innerHTML = st.qr_svg || "";
           $("url").textContent = st.url;
           $("fwBtn").style.display = "";
@@ -223,13 +256,18 @@
         }
       }
 
-      async function load() {
+      async function load(ip) {
         try {
-          render(await invoke("get_remote_state"));
+          render(await invoke("get_remote_state", { ip: ip ?? localStorage.getItem("remote-ip") }));
         } catch (e) {
           $("err").textContent = String(e);
         }
       }
+
+      $("ipSel").onchange = (e) => {
+        localStorage.setItem("remote-ip", e.target.value);
+        load(e.target.value);
+      };
 
       $("toggle").onchange = async (e) => {
         const toggle = $("toggle");
@@ -280,6 +318,7 @@
         $("backBtn").textContent = T.back;
         $("fwBtn").textContent = T.fw;
         $("hint").textContent = T.hint;
+        $("tsHint").textContent = T.tsHint;
         load();
       });
     </script>

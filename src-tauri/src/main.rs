@@ -76,6 +76,10 @@ struct VersionInfo {
 struct RemoteState {
     enabled: bool,
     running: bool,
+    /// 当前用于生成 URL 的地址
+    ip: String,
+    /// 本机全部候选 IPv4（供前端下拉切换）
+    ips: Vec<String>,
     url: Option<String>,
     qr_svg: Option<String>,
 }
@@ -222,14 +226,20 @@ async fn install_kimi(app: AppHandle) -> Result<(), String> {
 // ---------- 远程访问（局域网） ----------
 
 #[tauri::command]
-async fn get_remote_state(app: AppHandle) -> RemoteState {
+async fn get_remote_state(app: AppHandle, ip: Option<String>) -> RemoteState {
     let enabled = *app.state::<RemoteEnabled>().0.lock().unwrap();
     let state = app.state::<ServerChild>();
     let st = state.0.lock().unwrap();
     let running = st.child.is_some();
-    // 远程 URL 用局域网 IP + 与本地相同的端口和 token
-    let url = if enabled && running {
-        lan_ip().map(|ip| format!("http://{ip}:{}/#token={}", st.port, st.token))
+    let ips = candidate_ips();
+    // 前端指定则用之，否则自动优选（Tailscale 100.x > 私有网段 > 其他）
+    let chosen = ip
+        .filter(|s| ips.contains(s))
+        .or_else(|| preferred_ip(&ips))
+        .unwrap_or_default();
+    // 远程 URL 用选中 IP + 与本地相同的端口和 token
+    let url = if enabled && running && !chosen.is_empty() {
+        Some(format!("http://{chosen}:{}/#token={}", st.port, st.token))
     } else {
         None
     };
@@ -237,6 +247,8 @@ async fn get_remote_state(app: AppHandle) -> RemoteState {
     RemoteState {
         enabled,
         running,
+        ip: chosen,
+        ips,
         url,
         qr_svg,
     }
@@ -249,7 +261,7 @@ async fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteState
     *app.state::<RemoteEnabled>().0.lock().unwrap() = enabled;
     // 未安装 CLI 时没有服务可重启，仅保存配置
     if resolve_kimi().is_none() {
-        return Ok(get_remote_state(app).await);
+        return Ok(get_remote_state(app, None).await);
     }
     // 改绑定地址必须重启 kimi web；切占位页避免旧 WebUI 弹连接失败
     navigate_placeholder_and_wait(&app);
@@ -258,7 +270,7 @@ async fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteState
     start_and_navigate(&app)?;
     // 回到设置页，让用户看到更新后的状态
     show_remote_page(app.clone()).await?;
-    Ok(get_remote_state(app).await)
+    Ok(get_remote_state(app, None).await)
 }
 
 #[tauri::command]
@@ -639,6 +651,102 @@ fn lan_ip() -> Option<String> {
     let s = UdpSocket::bind("0.0.0.0:0").ok()?;
     s.connect("8.8.8.8:80").ok()?;
     Some(s.local_addr().ok()?.ip().to_string())
+}
+
+/// 枚举本机全部 IPv4（PowerShell Get-NetIPAddress，语言无关），
+/// 过滤 loopback 与 169.254 链路本地地址；失败时退化为路由探测的单个 IP
+fn candidate_ips() -> Vec<String> {
+    let mut cmd = Command::new("powershell");
+    cmd.args([
+        "-NoProfile",
+        "-Command",
+        "Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty IPAddress",
+    ])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null());
+    no_window(&mut cmd);
+    let mut ips: Vec<String> = match cmd.output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| ip_octets(l).is_some())
+            .filter(|l| !l.starts_with("127.") && !l.starts_with("169.254."))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if ips.is_empty() {
+        if let Some(ip) = lan_ip() {
+            ips.push(ip);
+        }
+    }
+    ips
+}
+
+fn ip_octets(ip: &str) -> Option<[u8; 4]> {
+    let mut v = [0u8; 4];
+    let mut i = 0;
+    for part in ip.split('.') {
+        if i >= 4 {
+            return None;
+        }
+        v[i] = part.parse().ok()?;
+        i += 1;
+    }
+    if i == 4 {
+        Some(v)
+    } else {
+        None
+    }
+}
+
+/// 优选远程访问地址：Tailscale CGNAT 段（100.64.0.0/10）> 私有网段 > 其他
+fn preferred_ip(ips: &[String]) -> Option<String> {
+    let rank = |ip: &str| match ip_octets(ip) {
+        Some([100, b, _, _]) if (64..=127).contains(&b) => 0, // Tailscale
+        Some([10, _, _, _]) => 1,
+        Some([172, b, _, _]) if (16..=31).contains(&b) => 1,
+        Some([192, 168, _, _]) => 1,
+        _ => 2,
+    };
+    ips.iter().min_by_key(|ip| rank(ip)).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(ips: &[&str]) -> Vec<String> {
+        ips.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn prefers_tailscale_over_lan() {
+        let ips = v(&["192.168.1.5", "100.101.2.3", "10.0.0.2"]);
+        assert_eq!(preferred_ip(&ips).as_deref(), Some("100.101.2.3"));
+    }
+
+    #[test]
+    fn falls_back_to_private_lan() {
+        let ips = v(&["8.8.8.8", "172.16.0.5"]);
+        assert_eq!(preferred_ip(&ips).as_deref(), Some("172.16.0.5"));
+        // 100.63 不在 CGNAT 段内，不应被当作 Tailscale
+        let ips = v(&["100.63.0.1", "10.1.1.1"]);
+        assert_eq!(preferred_ip(&ips).as_deref(), Some("10.1.1.1"));
+    }
+
+    #[test]
+    fn accepts_any_when_no_private() {
+        let ips = v(&["203.0.113.9"]);
+        assert_eq!(preferred_ip(&ips).as_deref(), Some("203.0.113.9"));
+        assert_eq!(preferred_ip(&[]), None);
+    }
+
+    #[test]
+    fn octet_parse() {
+        assert_eq!(ip_octets("100.64.0.1"), Some([100, 64, 0, 1]));
+        assert_eq!(ip_octets("not-an-ip"), None);
+        assert_eq!(ip_octets("1.2.3"), None);
+    }
 }
 
 /// 把 URL 渲染成黑模块白底的 SVG 二维码
