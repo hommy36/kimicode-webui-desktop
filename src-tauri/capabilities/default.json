@@ -8,6 +8,15 @@
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "allow-get-version-info",
+    "allow-do-update",
+    "allow-install-kimi",
+    "allow-get-remote-state",
+    "allow-set-remote-channel",
+    "allow-show-remote-page",
+    "allow-show-webui",
+    "allow-report-theme",
+    "allow-allow-firewall"
   ]
 }

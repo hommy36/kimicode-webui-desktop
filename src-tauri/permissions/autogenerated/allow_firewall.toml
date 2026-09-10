@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-allow-firewall"
+description = "Enables the allow_firewall command without any pre-configured scope."
+commands.allow = ["allow_firewall"]
+
+[[permission]]
+identifier = "deny-allow-firewall"
+description = "Denies the allow_firewall command without any pre-configured scope."
+commands.deny = ["allow_firewall"]

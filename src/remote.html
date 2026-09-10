@@ -4,36 +4,128 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kimi Code WebUI Desktop</title>
+    <script>
+      // 主题：亮/暗手动选择优先，缺省跟随系统
+      const t = localStorage.getItem("ui-theme");
+      if (t) document.documentElement.dataset.theme = t;
+    </script>
     <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1a1b1e;
+        --fg: #d4d4d4;
+        --muted: #9a9a9a;
+        --muted2: #8a8a8a;
+        --faint: #777777;
+        --border: #2c2d31;
+        --border-strong: #3a3b40;
+        --card: #202125;
+        --inbg: #232428;
+        --inhover: #26272c;
+        --track: #3c3c3c;
+        --knob: #d4d4d4;
+        --accent: #1a88ff;
+        --accent-hover: #0f76e8;
+        --link: #6b9fd4;
+        --badge-border: #3a5a7c;
+        --opt-disabled: #5c5c5c;
+        --btn2: #3c3d42;
+        --btn2-hover: #4a4b51;
+        --disabled-bg: #3c3c3c;
+        --disabled-fg: #8a8a8a;
+        --danger-fg: #f0928e;
+        --shadow: rgba(0, 0, 0, 0.45);
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: #ffffff;
+          --fg: #1f2329;
+          --muted: #646a73;
+          --muted2: #646a73;
+          --faint: #8f959e;
+          --border: #dee0e3;
+          --border-strong: #c9cdd4;
+          --card: #f7f8fa;
+          --inbg: #ffffff;
+          --inhover: #f5f6f7;
+          --track: #c9cdd4;
+          --knob: #ffffff;
+          --link: #1a88ff;
+          --badge-border: #a8c4e2;
+          --opt-disabled: #abacb0;
+          --btn2: #eceef0;
+          --btn2-hover: #dee0e3;
+          --disabled-bg: #eceef0;
+          --disabled-fg: #8f959e;
+          --danger-fg: #c0392b;
+          --shadow: rgba(0, 0, 0, 0.15);
+        }
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #ffffff;
+        --fg: #1f2329;
+        --muted: #646a73;
+        --muted2: #646a73;
+        --faint: #8f959e;
+        --border: #dee0e3;
+        --border-strong: #c9cdd4;
+        --card: #f7f8fa;
+        --inbg: #ffffff;
+        --inhover: #f5f6f7;
+        --track: #c9cdd4;
+        --knob: #ffffff;
+        --link: #1a88ff;
+        --badge-border: #a8c4e2;
+        --opt-disabled: #abacb0;
+        --btn2: #eceef0;
+        --btn2-hover: #dee0e3;
+        --disabled-bg: #eceef0;
+        --disabled-fg: #8f959e;
+        --danger-fg: #c0392b;
+        --shadow: rgba(0, 0, 0, 0.15);
+      }
       body {
         margin: 0;
         height: 100vh;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-        background: #1a1b1e;
-        color: #d4d4d4;
+        background: var(--bg);
+        color: var(--fg);
         user-select: none;
+        overflow-y: auto;
       }
       #panel {
+        width: 420px;
+        max-width: calc(100vw - 48px);
+        margin: auto;
+        padding: 24px 0;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        max-width: 460px;
-        text-align: center;
       }
       h2 {
-        margin: 0 0 18px;
-        font-size: 18px;
+        margin: 0 0 14px;
+        font-size: 17px;
+      }
+      .section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+        box-sizing: border-box;
       }
       .row {
         display: flex;
         align-items: center;
         gap: 10px;
-        margin-bottom: 14px;
         font-size: 14px;
+      }
+      .row + .row {
+        margin-top: 10px;
       }
       /* 开关 */
       .switch {
@@ -41,15 +133,16 @@
         width: 40px;
         height: 22px;
         appearance: none;
-        background: #3c3c3c;
+        background: var(--track);
         border-radius: 11px;
         cursor: pointer;
         transition: background 0.15s;
         outline: none;
         flex: none;
+        margin: 0;
       }
       .switch:checked {
-        background: #2b6cb0;
+        background: var(--accent);
       }
       .switch:disabled {
         cursor: default;
@@ -62,64 +155,173 @@
         left: 3px;
         width: 16px;
         height: 16px;
-        background: #d4d4d4;
+        background: var(--knob);
         border-radius: 50%;
         transition: left 0.15s;
       }
       .switch:checked::after {
         left: 21px;
       }
-      #status {
-        font-size: 13px;
-        color: #9a9a9a;
-        margin-bottom: 16px;
+      /* 自定义下拉 */
+      .dropdown {
+        position: relative;
+        flex: 1;
+        min-width: 0;
       }
-      #remoteInfo {
-        display: none;
-        flex-direction: column;
+      .dd-btn {
+        width: 100%;
+        display: flex;
         align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 12px;
+        font-size: 13px;
+        color: var(--fg);
+        background: var(--inbg);
+        border: 1px solid var(--inborder, var(--border));
+        border-radius: 6px;
+        cursor: pointer;
+        outline: none;
+        text-align: left;
       }
-      #ipSel {
-        margin-bottom: 12px;
-        padding: 5px 10px;
+      .dd-btn:hover:not(:disabled) {
+        border-color: var(--border-strong);
+        background: var(--inhover);
+      }
+      .dd-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .dd-btn .chev {
+        color: var(--muted2);
+        font-size: 10px;
+        transition: transform 0.15s;
+      }
+      .dropdown.open .dd-btn .chev {
+        transform: rotate(180deg);
+      }
+      .dropdown.open .dd-btn {
+        border-color: var(--accent);
+      }
+      .dd-list {
+        display: none;
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--inbg);
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        overflow: hidden;
+        z-index: 10;
+        box-shadow: 0 6px 20px var(--shadow);
+      }
+      .dropdown.open .dd-list {
+        display: block;
+      }
+      .dd-opt {
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .dd-opt:hover:not(.disabled) {
+        background: var(--accent);
+        color: #fff;
+      }
+      .dd-opt.selected::after {
+        content: "✓";
+        color: var(--link);
         font-size: 12px;
-        color: #d4d4d4;
-        background: #232428;
-        border: 1px solid #2c2d31;
+      }
+      .dd-opt.selected:hover::after {
+        color: #fff;
+      }
+      .dd-opt.disabled {
+        color: var(--opt-disabled);
+        cursor: default;
+      }
+      .dd-badge {
+        font-size: 10px;
+        color: var(--link);
+        border: 1px solid var(--badge-border);
+        border-radius: 4px;
+        padding: 1px 5px;
+        flex: none;
+      }
+      .dd-opt:hover:not(.disabled) .dd-badge {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.6);
+      }
+      select {
+        padding: 5px 8px;
+        font-size: 13px;
+        color: var(--fg);
+        background: var(--inbg);
+        border: 1px solid var(--border);
         border-radius: 5px;
         outline: none;
         max-width: 100%;
       }
-      #qr {
+      #chLabel {
+        color: var(--muted);
+        font-size: 13px;
+        flex: none;
+      }
+      .sub {
+        font-size: 12px;
+        color: var(--muted2);
+        line-height: 1.6;
+        margin: 10px 0 0;
+      }
+      #status {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .info {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 12px;
+      }
+      #ipSel {
+        margin-bottom: 12px;
+        font-size: 12px;
+      }
+      .qr {
         background: #fff;
         border-radius: 8px;
         padding: 10px;
         line-height: 0;
         margin-bottom: 12px;
       }
-      #urlRow {
+      .urlRow {
         display: flex;
         align-items: center;
         gap: 8px;
-        max-width: 440px;
-        margin-bottom: 16px;
+        width: 100%;
       }
-      #url {
+      .url {
         font-size: 12px;
-        color: #9a9a9a;
-        background: #232428;
-        border: 1px solid #2c2d31;
+        color: var(--muted);
+        background: var(--inbg);
+        border: 1px solid var(--border);
         border-radius: 5px;
         padding: 6px 10px;
         word-break: break-all;
         user-select: text;
         text-align: left;
+        min-width: 0;
       }
       .btn {
         padding: 6px 16px;
         font-size: 13px;
         color: #fff;
-        background: #2b6cb0;
+        background: var(--accent);
         border: none;
         border-radius: 5px;
         cursor: pointer;
@@ -127,64 +329,95 @@
         flex: none;
       }
       .btn:hover:not(:disabled) {
-        background: #3182ce;
+        background: var(--accent-hover);
       }
       .btn:disabled {
-        background: #3c3c3c;
-        color: #8a8a8a;
+        background: var(--disabled-bg);
+        color: var(--disabled-fg);
         cursor: default;
       }
       .btn.secondary {
-        background: #3c3d42;
-        color: #d4d4d4;
+        background: var(--btn2);
+        color: var(--fg);
       }
       .btn.secondary:hover {
-        background: #4a4b51;
+        background: var(--btn2-hover);
       }
       #hint,
       #tsHint {
         font-size: 12px;
-        color: #8a8a8a;
+        color: var(--faint);
         line-height: 1.7;
-      }
-      #hint {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
       #tsHint {
-        margin-bottom: 22px;
-        color: #6b9fd4;
+        color: var(--link);
+        margin-bottom: 12px;
       }
       #err {
         font-size: 12px;
-        color: #f0928e;
+        color: var(--danger-fg);
         margin-bottom: 12px;
         white-space: pre-wrap;
         word-break: break-all;
+      }
+      #fwBtn {
+        margin-bottom: 12px;
+        align-self: flex-start;
+      }
+      #backBtn {
+        align-self: flex-start;
       }
     </style>
   </head>
   <body>
     <div id="panel">
-      <h2 id="title">远程控制（局域网）</h2>
-      <div class="row">
-        <input type="checkbox" id="toggle" class="switch" />
-        <label for="toggle" id="toggleLabel">启用远程访问</label>
-      </div>
-      <div id="status"></div>
-      <div id="remoteInfo">
-        <select id="ipSel"></select>
-        <div id="qr"></div>
-        <div id="urlRow">
-          <div id="url"></div>
-          <button class="btn" id="copyBtn">复制</button>
+      <h2 id="title">远程控制</h2>
+
+      <div class="section">
+        <div class="row">
+          <input type="checkbox" id="toggle" class="switch" />
+          <label for="toggle" id="toggleLabel">启用远程控制</label>
+        </div>
+        <div class="row">
+          <label id="chLabel">通道</label>
+          <div class="dropdown" id="chDd">
+            <button type="button" class="dd-btn" id="chBtn">
+              <span id="chBtnText"></span><span class="chev">▼</span>
+            </button>
+            <div class="dd-list" id="chList">
+              <div class="dd-opt" data-v="direct" id="chDirect"></div>
+              <div class="dd-opt" data-v="rc" id="chRc"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sub" id="chSub"></div>
+        <div id="status"></div>
+
+        <!-- 直连信息 -->
+        <div class="info" id="directInfo">
+          <select id="ipSel"></select>
+          <div class="qr" id="qr"></div>
+          <div class="urlRow">
+            <div class="url" id="url"></div>
+            <button class="btn" id="copyBtn">复制</button>
+          </div>
+        </div>
+
+        <!-- 官方 RC 信息 -->
+        <div class="info" id="rcInfo">
+          <div class="qr" id="rcQr"></div>
+          <div class="urlRow">
+            <div class="url" id="rcUrl"></div>
+            <button class="btn" id="rcCopyBtn">复制</button>
+          </div>
         </div>
       </div>
+
       <div id="hint"></div>
       <div id="tsHint"></div>
       <div id="err"></div>
-      <button class="btn secondary" id="fwBtn" style="display: none; margin-bottom: 14px">
-        手机连不上？允许防火墙访问
-      </button>
+      <button class="btn secondary" id="fwBtn" style="display: none"></button>
       <button class="btn secondary" id="backBtn">返回</button>
     </div>
     <script>
@@ -196,11 +429,19 @@
       document.documentElement.lang = zh ? "zh-CN" : "en";
       const T = zh
         ? {
-            title: "远程控制（局域网）",
-            enable: "启用远程访问",
+            title: "远程控制",
+            enable: "启用远程控制",
+            channel: "通道",
+            chDirect: "直连（局域网 / Tailscale）",
+            chRc: "官方 Remote Control",
+            rcBadge: "实验",
+            directSub: "免费、无需账号。同一 WiFi 下手机扫码即用，跨网络配合 Tailscale。",
+            rcSub: "经 code-rc.kimi.com 云端中继，自带手机界面，跨网络可用。需 Kimi 账号登录。",
             off: "未开启，仅本机可访问",
-            on: "已开启，手机扫码或访问下方链接",
+            onDirect: "已开启，手机扫码或访问下方链接",
+            onRc: "已开启，手机扫码或访问下方链接",
             restarting: "正在重启服务…",
+            rcUnavailable: "当前 kimi 版本不支持官方 RC，需 ≥ v0.39.0，请先更新",
             copy: "复制",
             copied: "已复制",
             back: "返回",
@@ -208,15 +449,23 @@
             fwWorking: "等待管理员授权…",
             fwOk: "已允许，手机现在可以连接了",
             fwFail: "仍无法连通，请手动检查 Windows 防火墙",
-            hint: "手机需与电脑连接同一 WiFi。链接内的 token 是唯一鉴权手段，谁拿到链接谁就能控制，请勿在公共网络开启。",
-            tsHint: "校园网通常开启客户端隔离，同网也连不上。跨网络远程（4G / 外地）：在电脑和手机上安装 Tailscale（tailscale.com）并登录同一账号，然后选择上方 100.x 开头的地址。",
+            hint: "链接内的 token 是唯一鉴权手段，谁拿到谁就能控制，请勿在公共网络开启。",
+            tsHint: "校园网有客户端隔离时同网也连不上。跨网络（4G / 外地）：两端安装 Tailscale 并登录同一账号，IP 选 100.x 开头的地址。",
           }
         : {
-            title: "Remote Control (LAN)",
-            enable: "Enable remote access",
+            title: "Remote Control",
+            enable: "Enable remote control",
+            channel: "Channel",
+            chDirect: "Direct (LAN / Tailscale)",
+            chRc: "Official Remote Control",
+            rcBadge: "Experimental",
+            directSub: "Free, no account needed. Scan from a phone on the same WiFi; use Tailscale for cross-network access.",
+            rcSub: "Cloud relay via code-rc.kimi.com with a mobile UI, works across networks. Requires Kimi account sign-in.",
             off: "Off. This machine only.",
-            on: "On. Scan the QR code or open the link on your phone",
+            onDirect: "On. Scan the QR code or open the link on your phone",
+            onRc: "On. Scan the QR code or open the link on your phone",
             restarting: "Restarting service…",
+            rcUnavailable: "Official RC requires kimi ≥ v0.39.0. Please update first.",
             copy: "Copy",
             copied: "Copied",
             back: "Back",
@@ -224,17 +473,93 @@
             fwWorking: "Waiting for admin approval…",
             fwOk: "Allowed. Your phone can connect now",
             fwFail: "Still unreachable. Please check Windows Firewall manually",
-            hint: "Your phone must be on the same WiFi as this computer. The token in the link is the only credential — anyone with the link gets full control, so do not enable this on public networks.",
-            tsHint: "Campus networks usually isolate devices from each other. For remote access over any network (4G / away), install Tailscale (tailscale.com) on both this computer and your phone, sign in with the same account, then pick the 100.x address above.",
+            hint: "The token in the link is the only credential — anyone with it gets full control. Do not enable on public networks.",
+            tsHint: "Campus networks often isolate devices. For cross-network access (4G / away): install Tailscale on both ends, sign in with the same account, pick the 100.x address.",
           };
 
+      // ---- 自定义通道下拉 ----
+      let chValue = "direct";
+      let rcOptionEnabled = true;
+
+      function chRender() {
+        // 按钮文本
+        $("chBtnText").textContent = chValue === "rc" ? T.chRc : T.chDirect;
+        // 选项：选中勾 / 禁用态 / RC 徽章
+        for (const opt of document.querySelectorAll("#chList .dd-opt")) {
+          opt.classList.toggle("selected", opt.dataset.v === chValue);
+        }
+        const rcOpt = $("chRc");
+        rcOpt.classList.toggle("disabled", !rcOptionEnabled);
+        rcOpt.innerHTML =
+          `<span>${T.chRc}</span>` +
+          (rcOptionEnabled
+            ? `<span class="dd-badge">${T.rcBadge}</span>`
+            : `<span class="dd-badge">≥ v0.39.0</span>`);
+        $("chDirect").innerHTML = `<span>${T.chDirect}</span>`;
+      }
+
+      function chClose() {
+        $("chDd").classList.remove("open");
+      }
+
+      $("chBtn").onclick = (e) => {
+        e.stopPropagation();
+        $("chDd").classList.toggle("open");
+      };
+      document.addEventListener("click", chClose);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") chClose();
+      });
+      for (const opt of document.querySelectorAll("#chList .dd-opt")) {
+        opt.onclick = () => {
+          if (opt.classList.contains("disabled")) return;
+          chClose();
+          if (opt.dataset.v === chValue) return;
+          chValue = opt.dataset.v;
+          localStorage.setItem("remote-channel", chValue);
+          chRender();
+          renderSub();
+          // 开着则立即切换（重启服务），关着只记偏好
+          if ($("toggle").checked) apply(chValue);
+        };
+      }
+
+      // 当前生效通道：direct / rc / null（关）
+      function activeChannel(st) {
+        return st.enabled ? "direct" : st.rc_enabled ? "rc" : null;
+      }
+
+      function renderSub() {
+        const direct = chValue !== "rc";
+        $("chSub").textContent = direct ? T.directSub : T.rcSub;
+        // 安全提示和 Tailscale 提示只对直连有意义
+        $("hint").style.display = direct ? "" : "none";
+        $("tsHint").style.display = direct ? "" : "none";
+      }
+
       function render(st) {
+        const ch = activeChannel(st);
         const toggle = $("toggle");
         toggle.disabled = false;
-        toggle.checked = st.enabled;
-        $("status").textContent = st.enabled ? T.on : T.off;
-        if (st.enabled && st.url) {
-          $("remoteInfo").style.display = "flex";
+        toggle.checked = ch !== null;
+
+        // RC 版本不够：选项禁用并回退到直连
+        rcOptionEnabled = st.rc_available;
+        if (!st.rc_available && chValue === "rc") chValue = "direct";
+        if (ch) chValue = ch; // 开启时下拉跟随实际通道
+        chRender();
+        $("chBtn").disabled = false;
+        renderSub();
+
+        // 状态行
+        $("status").textContent =
+          ch === "direct" ? (st.url ? T.onDirect : T.restarting)
+          : ch === "rc" ? (st.rc_url ? T.onRc : T.restarting)
+          : T.off;
+
+        // 直连信息块
+        if (ch === "direct" && st.url) {
+          $("directInfo").style.display = "flex";
           // 多网卡时允许切换生成链接的 IP（如 Tailscale 的 100.x）
           const sel = $("ipSel");
           sel.innerHTML = "";
@@ -250,9 +575,17 @@
           $("url").textContent = st.url;
           $("fwBtn").style.display = "";
         } else {
-          $("remoteInfo").style.display = "none";
+          $("directInfo").style.display = "none";
           $("fwBtn").style.display = "none";
-          if (st.enabled) $("status").textContent = T.restarting;
+        }
+
+        // 官方 RC 信息块
+        if (ch === "rc" && st.rc_url) {
+          $("rcInfo").style.display = "flex";
+          $("rcQr").innerHTML = st.rc_qr_svg || "";
+          $("rcUrl").textContent = st.rc_url;
+        } else {
+          $("rcInfo").style.display = "none";
         }
       }
 
@@ -260,40 +593,55 @@
         try {
           render(await invoke("get_remote_state", { ip: ip ?? localStorage.getItem("remote-ip") }));
         } catch (e) {
-          $("err").textContent = String(e);
+          showErr(e);
         }
       }
+
+      function showErr(e) {
+        const s = String(e);
+        $("err").textContent = s.startsWith("rc_unsupported") ? T.rcUnavailable : s;
+      }
+
+      async function apply(channel) {
+        $("err").textContent = "";
+        $("status").textContent = T.restarting;
+        // 先藏起旧通道的二维码/链接，避免重启期间展示过期入口
+        $("directInfo").style.display = "none";
+        $("rcInfo").style.display = "none";
+        $("fwBtn").style.display = "none";
+        $("toggle").disabled = true;
+        $("chBtn").disabled = true;
+        try {
+          render(await invoke("set_remote_channel", { channel }));
+        } catch (err) {
+          showErr(err);
+          load(); // 失败则按实际状态回刷
+        }
+      }
+
+      // 开关：开=用下拉所选通道，关=off
+      $("toggle").onchange = (e) => apply(e.target.checked ? chValue : "off");
 
       $("ipSel").onchange = (e) => {
         localStorage.setItem("remote-ip", e.target.value);
         load(e.target.value);
       };
 
-      $("toggle").onchange = async (e) => {
-        const toggle = $("toggle");
-        toggle.disabled = true;
-        $("err").textContent = "";
-        $("status").textContent = T.restarting;
-        try {
-          render(await invoke("set_remote_enabled", { enabled: e.target.checked }));
-        } catch (err) {
-          $("err").textContent = String(err);
-          toggle.disabled = false;
-          load(); // 失败则按实际状态回刷
-        }
-      };
+      function wireCopy(btnId, urlId) {
+        $(btnId).onclick = async () => {
+          try {
+            await navigator.clipboard.writeText($(urlId).textContent);
+            $(btnId).textContent = T.copied;
+            setTimeout(() => ($(btnId).textContent = T.copy), 1500);
+          } catch (e) {
+            showErr(e);
+          }
+        };
+      }
+      wireCopy("copyBtn", "url");
+      wireCopy("rcCopyBtn", "rcUrl");
 
-      $("copyBtn").onclick = async () => {
-        try {
-          await navigator.clipboard.writeText($("url").textContent);
-          $("copyBtn").textContent = T.copied;
-          setTimeout(() => ($("copyBtn").textContent = T.copy), 1500);
-        } catch (e) {
-          $("err").textContent = String(e);
-        }
-      };
-
-      $("backBtn").onclick = () => invoke("show_webui").catch((e) => ($("err").textContent = String(e)));
+      $("backBtn").onclick = () => invoke("show_webui").catch(showErr);
 
       $("fwBtn").onclick = async () => {
         const btn = $("fwBtn");
@@ -306,7 +654,7 @@
           $("err").textContent = ok ? T.fwOk : T.fwFail;
         } catch (e) {
           $("err").style.color = "#f0928e";
-          $("err").textContent = String(e);
+          showErr(e);
         }
         btn.disabled = false;
       };
@@ -314,7 +662,12 @@
       window.addEventListener("DOMContentLoaded", () => {
         $("title").textContent = T.title;
         $("toggleLabel").textContent = T.enable;
+        $("chLabel").textContent = T.channel;
+        // 恢复上次的通道偏好（服务实际通道优先，在 render 里处理）
+        chValue = localStorage.getItem("remote-channel") || "direct";
+        chRender();
         $("copyBtn").textContent = T.copy;
+        $("rcCopyBtn").textContent = T.copy;
         $("backBtn").textContent = T.back;
         $("fwBtn").textContent = T.fw;
         $("hint").textContent = T.hint;

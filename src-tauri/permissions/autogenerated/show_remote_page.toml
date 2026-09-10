@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-show-remote-page"
+description = "Enables the show_remote_page command without any pre-configured scope."
+commands.allow = ["show_remote_page"]
+
+[[permission]]
+identifier = "deny-show-remote-page"
+description = "Denies the show_remote_page command without any pre-configured scope."
+commands.deny = ["show_remote_page"]

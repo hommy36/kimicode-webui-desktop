@@ -3,18 +3,73 @@
   <head>
     <meta charset="UTF-8" />
     <title>Kimi Code WebUI Desktop</title>
+    <script>
+      // 主题跟随 WebUI：Rust 侧把 WebUI 的主题写进 data-theme 和 localStorage，
+      // 这里在加载时先读上次的值，避免闪烁
+      const t = localStorage.getItem("ui-theme");
+      if (t) document.documentElement.dataset.theme = t;
+    </script>
     <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1a1b1e;
+        --fg: #d4d4d4;
+        --muted: #9a9a9a;
+        --border: #2c2d31;
+        --hover: #3c3d42;
+        --btn2: #3c3d42;
+        --btn2-hover: #4a4b51;
+        --winbtn: #b0b0b0;
+        --accent: #1a88ff;
+        --accent-hover: #0f76e8;
+        --disabled-bg: #3c3c3c;
+        --disabled-fg: #8a8a8a;
+        --danger-bg: #7a3535;
+        --danger-fg: #f0928e;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: #eceef0;
+          --fg: #1f2329;
+          --muted: #646a73;
+          --border: #dee0e3;
+          --hover: #e5e6eb;
+          --btn2: #d8dbe0;
+          --btn2-hover: #c9cdd4;
+          --winbtn: #646a73;
+          --disabled-bg: #eceef0;
+          --disabled-fg: #8f959e;
+          --danger-bg: #f5c6c2;
+          --danger-fg: #a93226;
+        }
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #eceef0;
+        --fg: #1f2329;
+        --muted: #646a73;
+        --border: #dee0e3;
+        --hover: #e5e6eb;
+        --btn2: #d8dbe0;
+        --btn2-hover: #c9cdd4;
+        --winbtn: #646a73;
+        --disabled-bg: #eceef0;
+        --disabled-fg: #8f959e;
+        --danger-bg: #f5c6c2;
+        --danger-fg: #a93226;
+      }
       body {
         margin: 0;
         height: 100vh;
         display: flex;
         align-items: stretch;
-        background: #1a1b1e;
-        color: #d4d4d4;
+        background: var(--bg);
+        color: var(--fg);
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
         user-select: none;
         overflow: hidden;
-        border-bottom: 1px solid #2c2d31;
+        border-bottom: 1px solid var(--border);
         box-sizing: border-box;
       }
       .brand {
@@ -29,6 +84,24 @@
         width: 22px;
         height: 22px;
       }
+      /* 亮色主题换白眼睛图标 */
+      .logo-light {
+        display: none;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) .logo-dark {
+          display: none;
+        }
+        :root:not([data-theme="dark"]) .logo-light {
+          display: block;
+        }
+      }
+      :root[data-theme="light"] .logo-dark {
+        display: none;
+      }
+      :root[data-theme="light"] .logo-light {
+        display: block;
+      }
       .spacer {
         flex: 1;
       }
@@ -38,12 +111,12 @@
       }
       .ver {
         font-size: 12px;
-        color: #9a9a9a;
+        color: var(--muted);
         margin-right: 12px;
         white-space: nowrap;
       }
       .ver b {
-        color: #d4d4d4;
+        color: var(--fg);
         font-weight: 600;
       }
       #btn,
@@ -53,31 +126,30 @@
         padding: 4px 12px;
         font-size: 12px;
         color: #fff;
-        background: #2b6cb0;
+        background: var(--accent);
         border: none;
         border-radius: 5px;
         cursor: pointer;
         white-space: nowrap;
       }
-      #btn:hover:not(:disabled),
-      #remoteBtn:hover:not(:disabled) {
-        background: #3182ce;
+      #btn:hover:not(:disabled) {
+        background: var(--accent-hover);
       }
       #btn:disabled {
-        background: #3c3c3c;
-        color: #8a8a8a;
+        background: var(--disabled-bg);
+        color: var(--disabled-fg);
         cursor: default;
       }
       #remoteBtn {
-        background: #3c3d42;
-        color: #d4d4d4;
+        background: var(--btn2);
+        color: var(--fg);
       }
       #remoteBtn:hover {
-        background: #4a4b51;
+        background: var(--btn2-hover);
       }
       #btn.err {
-        background: #7a3535;
-        color: #f0928e;
+        background: var(--danger-bg);
+        color: var(--danger-fg);
       }
       /* 窗口控制按钮 */
       .winbtns {
@@ -88,7 +160,7 @@
         width: 46px;
         border: none;
         background: transparent;
-        color: #b0b0b0;
+        color: var(--winbtn);
         font-size: 12px;
         font-family: "Segoe MDL2 Assets", "Segoe UI Symbol", sans-serif;
         cursor: pointer;
@@ -97,7 +169,7 @@
         justify-content: center;
       }
       .winbtn:hover {
-        background: #3c3d42;
+        background: var(--hover);
       }
       .winbtn.close:hover {
         background: #e81123;
@@ -109,7 +181,7 @@
   </head>
   <body>
     <div class="brand" data-tauri-drag-region>
-      <img src="logo.png" alt="" data-tauri-drag-region /><span data-tauri-drag-region>Kimi Code WebUI Desktop</span>
+      <img class="logo-dark" src="logo.png" alt="" data-tauri-drag-region /><img class="logo-light" src="logo-light.png" alt="" data-tauri-drag-region /><span data-tauri-drag-region>Kimi Code WebUI Desktop</span>
     </div>
     <div class="spacer" data-tauri-drag-region></div>
     <div class="vers" data-tauri-drag-region>

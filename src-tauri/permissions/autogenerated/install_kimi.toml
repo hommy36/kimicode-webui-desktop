@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-install-kimi"
+description = "Enables the install_kimi command without any pre-configured scope."
+commands.allow = ["install_kimi"]
+
+[[permission]]
+identifier = "deny-install-kimi"
+description = "Denies the install_kimi command without any pre-configured scope."
+commands.deny = ["install_kimi"]

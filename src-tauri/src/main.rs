@@ -39,6 +39,58 @@ struct PlaceholderUrl(Mutex<String>);
 /// 远程访问（局域网）开关，来自 ~/.kimi-code/webui-desktop.json
 struct RemoteEnabled(Mutex<bool>);
 
+/// 官方 Remote Control（code-rc.kimi.com 云端中继）开关，同一配置文件
+struct RcEnabled(Mutex<bool>);
+
+/// 当前界面主题（"light"/"dark"），由 WebUI 页面通过初始化脚本报上来
+struct UiTheme(Mutex<String>);
+
+/// 注入内容区 webview 的主题上报脚本：读 WebUI 的 <html data-color-scheme>
+/// （其 boot.js 从 localStorage kimi-web.color-scheme 恢复，值为 light/dark/system），
+/// system 按系统偏好解析后再上报。本应用自己的页面没有这个属性，直接跳过。
+/// MutationObserver 监听属性变化，WebUI 设置里切主题时即时上报。
+const THEME_SYNC_JS: &str = r#"(function () {
+  if (window.__themeSyncInstalled) return;
+  function resolved() {
+    var v = document.documentElement.dataset.colorScheme;
+    if (v === 'light' || v === 'dark') return v;
+    if (v !== 'system') return null; // 非 WebUI 页面（本应用的占位页/设置页）
+    return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  var last = '';
+  function report() {
+    try {
+      var v = resolved();
+      if (v && v !== last) {
+        // invoke 成功后才记 last：失败（页面正在跳转等）下轮轮询会重试，避免一次失败永久失同步
+        window.__TAURI_INTERNALS__.invoke('report_theme', { theme: v })
+          .then(function () { last = v; })
+          .catch(function () {});
+      }
+    } catch (e) {}
+  }
+  function init() {
+    // document-created 时机 documentElement 可能尚未构建（整页 reload 竞态），
+    // 此时直接 observe 会抛异常导致整个脚本死亡，本页生命周期内上报全灭
+    if (!document.documentElement) return false;
+    try {
+      new MutationObserver(report).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-color-scheme'],
+      });
+      matchMedia('(prefers-color-scheme: light)').addEventListener('change', report);
+    } catch (e) {}
+    // 3 秒轮询兜底：观察器只负责即时性，轮询补上装上之前的属性设置
+    setInterval(report, 3000);
+    report();
+    window.__themeSyncInstalled = true;
+    return true;
+  }
+  if (!init()) {
+    var t = setInterval(function () { if (init()) clearInterval(t); }, 50);
+  }
+})();"#;
+
 /// 防止服务重启流程并发（快速双击开关、更新与切换同时进行等）。
 /// 并发重启曾导致两个 kimi web 同时抢固定端口，一个挤到随机端口成为无人管理的残留。
 static RESTART_BUSY: AtomicBool = AtomicBool::new(false);
@@ -63,7 +115,10 @@ impl Drop for BusyGuard {
 
 #[derive(Serialize, Deserialize)]
 struct DesktopConfig {
+    #[serde(default)]
     remote_enabled: bool,
+    #[serde(default)]
+    rc_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -82,21 +137,35 @@ struct RemoteState {
     ips: Vec<String>,
     url: Option<String>,
     qr_svg: Option<String>,
+    /// 官方 Remote Control 开关状态
+    rc_enabled: bool,
+    /// 当前 kimi 版本是否支持 --remote-control（≥ v0.39.0）
+    rc_available: bool,
+    rc_url: Option<String>,
+    rc_qr_svg: Option<String>,
 }
 
 fn main() {
+    let mut cfg = load_config();
+    if cfg.remote_enabled && cfg.rc_enabled {
+        // 两个通道互斥（见 set_remote_channel 注释）；配置异常时保留直连
+        cfg.rc_enabled = false;
+    }
     tauri::Builder::default()
         .manage(ServerChild(Mutex::new(ServerState::default())))
         .manage(PlaceholderUrl(Mutex::new(MAIN_HTML_URL.to_string())))
-        .manage(RemoteEnabled(Mutex::new(load_remote_enabled())))
+        .manage(RemoteEnabled(Mutex::new(cfg.remote_enabled)))
+        .manage(RcEnabled(Mutex::new(cfg.rc_enabled)))
+        .manage(UiTheme(Mutex::new(String::new())))
         .invoke_handler(tauri::generate_handler![
             get_version_info,
             do_update,
             install_kimi,
             get_remote_state,
-            set_remote_enabled,
+            set_remote_channel,
             show_remote_page,
             show_webui,
+            report_theme,
             allow_firewall
         ])
         .setup(|app| {
@@ -104,7 +173,8 @@ fn main() {
             let size = window.inner_size().unwrap_or(PhysicalSize::new(1280, 800));
             // 顶栏 = 窗口自带 webview（label "main"），内容区 = 子 webview
             window.add_child(
-                WebviewBuilder::new(CONTENT_LABEL, WebviewUrl::App("main.html".into())),
+                WebviewBuilder::new(CONTENT_LABEL, WebviewUrl::App("main.html".into()))
+                    .initialization_script(THEME_SYNC_JS),
                 PhysicalPosition::new(0, 0),
                 PhysicalSize::new(1, 1),
             )?;
@@ -228,6 +298,7 @@ async fn install_kimi(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn get_remote_state(app: AppHandle, ip: Option<String>) -> RemoteState {
     let enabled = *app.state::<RemoteEnabled>().0.lock().unwrap();
+    let rc_enabled = *app.state::<RcEnabled>().0.lock().unwrap();
     let state = app.state::<ServerChild>();
     let st = state.0.lock().unwrap();
     let running = st.child.is_some();
@@ -243,34 +314,86 @@ async fn get_remote_state(app: AppHandle, ip: Option<String>) -> RemoteState {
     } else {
         None
     };
-    let qr_svg = url.as_deref().and_then(qr_svg);
+    // 官方 RC 链接：kimi web 带 --remote-control 运行时才有效
+    let rc_available = current_version()
+        .map(|v| rc_supported(&v))
+        .unwrap_or(false);
+    let rc_url = if rc_enabled && rc_available && running {
+        build_rc_url()
+    } else {
+        None
+    };
+    let qr = url.as_deref().and_then(qr_svg);
+    let rc_qr = rc_url.as_deref().and_then(qr_svg);
     RemoteState {
         enabled,
         running,
         ip: chosen,
         ips,
         url,
-        qr_svg,
+        qr_svg: qr,
+        rc_enabled,
+        rc_available,
+        rc_url,
+        rc_qr_svg: rc_qr,
     }
 }
 
-#[tauri::command]
-async fn set_remote_enabled(app: AppHandle, enabled: bool) -> Result<RemoteState, String> {
-    let _busy = BusyGuard::acquire().ok_or_else(|| "busy|".to_string())?;
-    save_remote_enabled(enabled)?;
-    *app.state::<RemoteEnabled>().0.lock().unwrap() = enabled;
+/// 通道切换共用流程：保存→重启服务→返回最新状态
+async fn apply_server_flags(app: &AppHandle) -> Result<RemoteState, String> {
     // 未安装 CLI 时没有服务可重启，仅保存配置
     if resolve_kimi().is_none() {
-        return Ok(get_remote_state(app, None).await);
+        return Ok(get_remote_state(app.clone(), None).await);
     }
-    // 改绑定地址必须重启 kimi web；切占位页避免旧 WebUI 弹连接失败
-    navigate_placeholder_and_wait(&app);
-    show_status_on(&app, "starting");
-    kill_server(&app);
-    start_and_navigate(&app)?;
-    // 回到设置页，让用户看到更新后的状态
-    show_remote_page(app.clone()).await?;
-    Ok(get_remote_state(app, None).await)
+    let on_remote_page = app
+        .get_webview(CONTENT_LABEL)
+        .and_then(|c| c.url().ok())
+        .map(|u| u.as_str().contains("remote.html"))
+        .unwrap_or(false);
+    if on_remote_page {
+        // 调用方就在设置页：原地重启，不切页。否则先切占位页再切回等于整页刷新，
+        // 新页面开关默认是关，要等 load 回来才亮——用户会看到开关"慢半拍"
+        kill_server(app);
+        start_server(app)?;
+    } else {
+        // 从 WebUI 切换时：先切占位页避免旧 WebUI 弹连接失败
+        navigate_placeholder_and_wait(app);
+        show_status_on(app, "starting");
+        kill_server(app);
+        start_and_navigate(app)?;
+        // 回到设置页，让用户看到更新后的状态
+        show_remote_page(app.clone()).await?;
+    }
+    Ok(get_remote_state(app.clone(), None).await)
+}
+
+/// 远程通道三态：off=关闭 / direct=直连（--host 0.0.0.0） / rc=官方 Remote Control。
+/// 互斥：kimi 要求 --remote-control 绑定 loopback，与直连的 --host 0.0.0.0 冲突。
+#[tauri::command]
+async fn set_remote_channel(app: AppHandle, channel: String) -> Result<RemoteState, String> {
+    let _busy = BusyGuard::acquire().ok_or_else(|| "busy|".to_string())?;
+    let (direct, rc) = match channel.as_str() {
+        "off" => (false, false),
+        "direct" => (true, false),
+        "rc" => {
+            // 版本不够不允许开
+            let ok = current_version()
+                .map(|v| rc_supported(&v))
+                .unwrap_or(false);
+            if !ok {
+                return Err("rc_unsupported|".to_string());
+            }
+            (false, true)
+        }
+        _ => return Err("bad_channel|".to_string()),
+    };
+    update_config(|c| {
+        c.remote_enabled = direct;
+        c.rc_enabled = rc;
+    })?;
+    *app.state::<RemoteEnabled>().0.lock().unwrap() = direct;
+    *app.state::<RcEnabled>().0.lock().unwrap() = rc;
+    apply_server_flags(&app).await
 }
 
 #[tauri::command]
@@ -307,6 +430,43 @@ async fn show_webui(app: AppHandle) -> Result<(), String> {
     content
         .navigate(url.parse().expect("invalid url"))
         .map_err(|e| format!("nav_failed|{e}"))
+}
+
+/// WebUI 页面经初始化脚本（THEME_SYNC_JS）上报主题变化，这里同步到顶栏，
+/// 并写入 localStorage 供本应用其他页面（占位页/远程页）下次加载时读取。
+/// WebUI 自身的主题由它自己管，不动。
+#[tauri::command]
+async fn report_theme(app: AppHandle, theme: String) {
+    let theme = match theme.as_str() {
+        "light" => "light",
+        "dark" => "dark",
+        _ => return,
+    };
+    {
+        let state = app.state::<UiTheme>();
+        let mut cur = state.0.lock().unwrap();
+        if *cur == theme {
+            return;
+        }
+        *cur = theme.to_string();
+    }
+    let js = format!(
+        "document.documentElement.dataset.theme={theme:?};\
+         try{{localStorage.setItem('ui-theme',{theme:?})}}catch(e){{}}"
+    );
+    if let Some(bar) = app.get_webview("main") {
+        let _ = bar.eval(&js);
+    }
+    // 内容页若正停在本应用页面（占位页/远程页）也立即切换
+    if let Some(c) = app.get_webview(CONTENT_LABEL) {
+        let ours = c
+            .url()
+            .map(|u| u.as_str().contains("main.html") || u.as_str().contains("remote.html"))
+            .unwrap_or(false);
+        if ours {
+            let _ = c.eval(&js);
+        }
+    }
 }
 
 /// 为监听中的 kimi.exe 添加 Windows 防火墙入站允许规则（弹 UAC，需用户点"是"）。
@@ -366,26 +526,35 @@ async fn allow_firewall(app: AppHandle) -> Result<bool, String> {
 
 // ---------- 启动 / 更新流程 ----------
 
-/// 启动 `kimi web` 并把内容区导航到带 token 的 WebUI 地址
-fn start_and_navigate(app: &AppHandle) -> Result<(), String> {
-    show_status_on(app, "starting");
+/// 只启动 `kimi web` 服务，不导航（设置页原地重启时用）
+fn start_server(app: &AppHandle) -> Result<(), String> {
     let home = kimi_home()?;
     kill_leftover_servers();
     let port = pick_free_port()?;
     let remote = *app.state::<RemoteEnabled>().0.lock().unwrap();
-    let mut child = spawn_kimi_web(port, remote)?;
+    let rc = *app.state::<RcEnabled>().0.lock().unwrap();
+    let mut child = spawn_kimi_web(port, remote, rc)?;
 
     let token = read_token(&home, &mut child)?;
-    show_status_on(app, "waiting");
     wait_until_ready(port, &mut child)?;
 
-    {
+    let state = app.state::<ServerChild>();
+    let mut st = state.0.lock().unwrap();
+    st.port = port;
+    st.token = token;
+    st.child = Some(child);
+    Ok(())
+}
+
+/// 启动 `kimi web` 并把内容区导航到带 token 的 WebUI 地址
+fn start_and_navigate(app: &AppHandle) -> Result<(), String> {
+    show_status_on(app, "starting");
+    start_server(app)?;
+    let (port, token) = {
         let state = app.state::<ServerChild>();
-        let mut st = state.0.lock().unwrap();
-        st.port = port;
-        st.token = token.clone();
-        st.child = Some(child);
-    }
+        let st = state.0.lock().unwrap();
+        (st.port, st.token.clone())
+    };
     let url = format!("http://127.0.0.1:{port}/#token={token}");
     let content = app
         .get_webview(CONTENT_LABEL)
@@ -532,7 +701,7 @@ fn kill_leftover_servers() {
     let _ = cmd.output();
 }
 
-fn spawn_kimi_web(port: u16, remote: bool) -> Result<Child, String> {
+fn spawn_kimi_web(port: u16, remote: bool, rc: bool) -> Result<Child, String> {
     let kimi = resolve_kimi().ok_or_else(|| "no_cli|".to_string())?;
     let mut cmd = Command::new(kimi);
     cmd.args(["web", "--no-open", "--port", &port.to_string()]);
@@ -540,11 +709,39 @@ fn spawn_kimi_web(port: u16, remote: bool) -> Result<Child, String> {
         // 绑定所有网卡供局域网访问；鉴权靠 kimi web 自带的 bearer token
         cmd.args(["--host", "0.0.0.0"]);
     }
+    if rc {
+        // 官方 Remote Control：连接 code-rc.kimi.com 云端中继。
+        // 环境变量开启实验特性 + 命令行参数启用中继，两者缺一不可。
+        cmd.env("KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL", "1");
+        cmd.arg("--remote-control");
+    }
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     no_window(&mut cmd);
     cmd.spawn().map_err(|e| format!("spawn_failed|{e}"))
+}
+
+// ---------- 官方 Remote Control ----------
+
+/// kimi 从 v0.39.0 起提供 `kimi web --remote-control`
+fn rc_supported(version: &str) -> bool {
+    let mut it = version.trim_start_matches('v').split('.');
+    let major: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor) >= (0, 39)
+}
+
+/// 官方 RC 链接可确定性构造：device_id 是 ~/.kimi-code/device_id 的内容
+fn build_rc_url() -> Option<String> {
+    let id = std::fs::read_to_string(kimi_home().ok()?.join("device_id")).ok()?;
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "https://code-rc.kimi.com/devices/{id}/?rc=1&from=kimi_code_cli"
+    ))
 }
 
 /// 轮询读取 <home>/server.token（首次运行时文件可能尚未生成）
@@ -627,22 +824,31 @@ fn config_path() -> Result<PathBuf, String> {
     Ok(kimi_home()?.join("webui-desktop.json"))
 }
 
-fn load_remote_enabled() -> bool {
-    let Ok(path) = config_path() else { return false };
-    let Ok(s) = std::fs::read_to_string(path) else {
-        return false;
+fn load_config() -> DesktopConfig {
+    let Ok(path) = config_path() else {
+        return DesktopConfig {
+            remote_enabled: false,
+            rc_enabled: false,
+        };
     };
-    serde_json::from_str::<DesktopConfig>(&s)
-        .map(|c| c.remote_enabled)
-        .unwrap_or(false)
+    let Ok(s) = std::fs::read_to_string(path) else {
+        return DesktopConfig {
+            remote_enabled: false,
+            rc_enabled: false,
+        };
+    };
+    serde_json::from_str::<DesktopConfig>(&s).unwrap_or(DesktopConfig {
+        remote_enabled: false,
+        rc_enabled: false,
+    })
 }
 
-fn save_remote_enabled(enabled: bool) -> Result<(), String> {
+/// 读出→改字段→写回：配置文件含多个开关，整写会冲掉其他字段
+fn update_config(f: impl FnOnce(&mut DesktopConfig)) -> Result<(), String> {
     let path = config_path()?;
-    let json = serde_json::to_string_pretty(&DesktopConfig {
-        remote_enabled: enabled,
-    })
-    .map_err(|e| format!("cfg_failed|{e}"))?;
+    let mut cfg = load_config();
+    f(&mut cfg);
+    let json = serde_json::to_string_pretty(&cfg).map_err(|e| format!("cfg_failed|{e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("cfg_failed|{}: {e}", path.display()))
 }
 
@@ -746,6 +952,18 @@ mod tests {
         assert_eq!(ip_octets("100.64.0.1"), Some([100, 64, 0, 1]));
         assert_eq!(ip_octets("not-an-ip"), None);
         assert_eq!(ip_octets("1.2.3"), None);
+    }
+
+    #[test]
+    fn rc_version_gate() {
+        assert!(rc_supported("0.39.0"));
+        assert!(rc_supported("0.41.0"));
+        assert!(rc_supported("1.0.0"));
+        assert!(!rc_supported("0.38.9"));
+        assert!(!rc_supported("0.4.0"));
+        assert!(!rc_supported("garbage"));
+        // 带 v 前缀与缺省 patch 也能解析
+        assert!(rc_supported("v0.39"));
     }
 }
 

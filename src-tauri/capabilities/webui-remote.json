@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "webui-remote",
+  "description": "WebUI 页面（kimi web 服务，http://127.0.0.1:port）仅允许上报主题变化；其余 app 命令不对远程来源开放",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*"]
+  },
+  "permissions": ["allow-report-theme"]
+}
