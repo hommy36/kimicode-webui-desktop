@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kimi 远程</string>
+    <string name="cancel">取消</string>
+    <string name="connect">连接</string>
+    <string name="url_hint">手动输入远程链接</string>
+    <string name="camera_denied">相机权限未授予，请手动输入地址</string>
+    <string name="invalid_url">链接格式不对</string>
+    <string name="channel_direct">直连</string>
+    <string name="channel_rc">官方 RC</string>
+    <string name="last_url_fmt">上次（%1$s）：%2$s</string>
+</resources>

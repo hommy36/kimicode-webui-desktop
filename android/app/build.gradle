@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.kimicode.remote'
+    // 本机自带的 android-37 平台被 AGP 8.7 误判为代号平台，改用 34，AGP 会从 dl.google.com 自动下载该平台
+    compileSdk 34
+    // 本机已装 36.0.0，显式指定以免 AGP 去下载默认的 34.0.0（校园网下载易损坏）
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'app.kimicode.remote'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+}
+
+// zxing 拉旧版 kotlin-stdlib-jdk8 与 appcompat 的 stdlib 1.8.22 撞类，统一强制到 1.8.22
+// （1.8 起 jdk8 扩展已并入 stdlib 本体，jdk8 工件只剩空壳转发，强制对齐即可）
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}
