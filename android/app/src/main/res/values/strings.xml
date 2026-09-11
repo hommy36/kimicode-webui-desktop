@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Kimi 远程</string>
+    <string name="app_name">KimiCode Remote</string>
     <string name="cancel">取消</string>
     <string name="connect">连接</string>
     <string name="url_hint">手动输入远程链接</string>
@@ -8,5 +8,9 @@
     <string name="invalid_url">链接格式不对</string>
     <string name="channel_direct">直连</string>
     <string name="channel_rc">官方 RC</string>
+    <string name="pick_image">图片</string>
+    <string name="pick_file">文件</string>
+    <string name="upload_title">上传</string>
+    <string name="back_hint">再按一次返回连接页</string>
     <string name="last_url_fmt">上次（%1$s）：%2$s</string>
 </resources>

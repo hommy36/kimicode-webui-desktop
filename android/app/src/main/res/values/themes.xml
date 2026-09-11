@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.KimiRemote" parent="Theme.AppCompat.NoActionBar">
+    <!-- DayNight：uiMode 跟随系统，WebView 的 prefers-color-scheme 才能跟着系统走 -->
+    <style name="Theme.KimiRemote" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:statusBarColor">#16171a</item>
         <item name="android:navigationBarColor">#16171a</item>
         <item name="android:windowBackground">@android:color/black</item>

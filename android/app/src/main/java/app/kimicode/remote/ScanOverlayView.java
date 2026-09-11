@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
@@ -45,6 +46,12 @@ public class ScanOverlayView extends View {
         return v * getResources().getDisplayMetrics().density;
     }
 
+    private boolean isNight() {
+        return (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         float side = Math.min(w, h) * 0.62f;
@@ -71,23 +78,28 @@ public class ScanOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        // 遮罩跟随系统主题：深色透黑，浅色透白
+        scrimPaint.setColor(isNight() ? SCRIM : 0x99FFFFFF);
         // 离屏层：先画遮罩再挖空扫描框
         int layer = canvas.saveLayer(0, 0, getWidth(), getHeight(), null);
         canvas.drawRect(0, 0, getWidth(), getHeight(), scrimPaint);
         canvas.drawRoundRect(frame, dp(16), dp(16), clearPaint);
         canvas.restoreToCount(layer);
 
-        // 四角括号
+        // 四角圆角括号：弧线过渡，与挖空圆角同半径，契合整体圆角风格
         float arm = dp(22);
+        float rr = dp(16);
         float l = frame.left, t = frame.top, r = frame.right, b = frame.bottom;
-        canvas.drawLine(l, t + arm, l, t, accentPaint);
-        canvas.drawLine(l, t, l + arm, t, accentPaint);
-        canvas.drawLine(r - arm, t, r, t, accentPaint);
-        canvas.drawLine(r, t, r, t + arm, accentPaint);
-        canvas.drawLine(l, b - arm, l, b, accentPaint);
-        canvas.drawLine(l, b, l + arm, b, accentPaint);
-        canvas.drawLine(r - arm, b, r, b, accentPaint);
-        canvas.drawLine(r, b, r, b - arm, accentPaint);
+        Path p = new Path();
+        p.moveTo(l, t + arm); p.lineTo(l, t + rr);
+        p.quadTo(l, t, l + rr, t); p.lineTo(l + arm, t);
+        p.moveTo(r - arm, t); p.lineTo(r - rr, t);
+        p.quadTo(r, t, r, t + rr); p.lineTo(r, t + arm);
+        p.moveTo(l, b - arm); p.lineTo(l, b - rr);
+        p.quadTo(l, b, l + rr, b); p.lineTo(l + arm, b);
+        p.moveTo(r - arm, b); p.lineTo(r - rr, b);
+        p.quadTo(r, b, r, b - rr); p.lineTo(r, b - arm);
+        canvas.drawPath(p, accentPaint);
 
         // 扫描线
         if (lineY >= 0) {

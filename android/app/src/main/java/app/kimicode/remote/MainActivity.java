@@ -1,12 +1,22 @@
 package app.kimicode.remote;
 
 import android.Manifest;
+import android.app.Dialog;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -22,6 +32,11 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.ResultPoint;
@@ -58,6 +73,128 @@ public class MainActivity extends AppCompatActivity {
     private EditText urlInput;
 
     private SharedPreferences prefs;
+    private View bottomCard;
+    /** WebView 文件选择回调（WebUI 的附件上传） */
+    private ValueCallback<Uri[]> fileCallback;
+    private static final int REQ_FILE = 2;
+    /** 页面亮暗轮询，用于状态栏/导航栏跟随页面主题 */
+    private final Handler themeHandler = new Handler(Looper.getMainLooper());
+    private Boolean lastPageLight = null;
+    /** 当前页面是否自带 viewport-fit=cover 安全区适配（是则内容延伸到状态栏下） */
+    private boolean pageCoversTop = false;
+    private int sysTop = 0;
+    /** 上次按返回键的时间，用于双击返回保护 */
+    private long lastBackAt = 0;
+
+    private final Runnable themePoller = new Runnable() {
+        @Override
+        public void run() {
+            if (webContainer.getVisibility() == View.VISIBLE && popupView == null) {
+                webView.evaluateJavascript(
+                        "(function(){try{var c=getComputedStyle(document.body).backgroundColor;"
+                                + "var m=c.match(/[\\d.]+/g);var light='';"
+                                + "if(m&&m.length>=3){light=((0.299*+m[0]+0.587*+m[1]+0.114*+m[2])>140)?'1':'0'}"
+                                + "var cover='0';var meta=document.querySelector('meta[name=viewport]');"
+                                + "if(meta&&/viewport-fit\\s*=\\s*cover/.test(meta.content))cover='1';"
+                                + "return light+','+cover}catch(e){return ''}})()",
+                        v -> {
+                            if (v == null || v.length() < 3 || v.charAt(0) != '"') return;
+                            String[] parts = v.substring(1, v.length() - 1).split(",");
+                            if (parts.length != 2 || parts[0].isEmpty()) return;
+                            applyPageStyle("1".equals(parts[0]), "1".equals(parts[1]));
+                        });
+            }
+            themeHandler.postDelayed(this, 2000);
+        }
+    };
+
+    /** 扫码页等自绘界面用：系统栏与背景跟随系统主题 */
+    private void applySystemBars() {
+        boolean night = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        lastPageLight = null; // 回 WebView 时让轮询重新判定
+        pageCoversTop = false;
+        View root = findViewById(android.R.id.content);
+        root.setBackgroundColor(night ? 0xFF16171A : Color.WHITE);
+        root.setPadding(0, sysTop, 0, 0);
+        WindowInsetsControllerCompat c =
+                new WindowInsetsControllerCompat(getWindow(), webView);
+        c.setAppearanceLightStatusBars(!night);
+        c.setAppearanceLightNavigationBars(!night);
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 系统切换明暗主题（uiMode 在 configChanges 里，Activity 不重建）
+        if (scanContainer.getVisibility() == View.VISIBLE) {
+            applySystemBars();
+        }
+    }
+
+    /** 状态栏透明悬浮，图标颜色跟随页面；页面无 safe-area 适配时加顶部留白 */
+    private void applyPageStyle(boolean light, boolean cover) {
+        View root = findViewById(android.R.id.content);
+        lastPageLight = light;
+        pageCoversTop = cover;
+        root.setBackgroundColor(light ? Color.WHITE : 0xFF16171A);
+        root.setPadding(0, cover ? 0 : sysTop, 0, 0);
+        WindowInsetsControllerCompat c =
+                new WindowInsetsControllerCompat(getWindow(), webView);
+        c.setAppearanceLightStatusBars(light);
+        c.setAppearanceLightNavigationBars(light);
+    }
+
+    /** edge-to-edge：状态栏/导航栏透明，内容可延伸到系统栏下；页面是否自适配由轮询决定 */
+    private void setupEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        // 关掉系统自动加的系统栏对比度遮罩，否则透明栏上仍有底色
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            getWindow().setStatusBarContrastEnforced(false);
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(
+                findViewById(android.R.id.content), (v, insets) -> {
+                    Insets sys = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                    sysTop = sys.top;
+                    v.setPadding(0, pageCoversTop ? 0 : sysTop, 0, 0);
+                    float d = getResources().getDisplayMetrics().density;
+                    bottomCard.setPadding((int) (20 * d), (int) (20 * d),
+                            (int) (20 * d), (int) (20 * d) + sys.bottom);
+                    return insets;
+                });
+    }
+
+    /** 上传类型选择：自绘底部悬浮圆角卡片，不用系统默认 AlertDialog */
+    private void showPickerDialog(boolean multiple) {
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.dialog_picker);
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setGravity(Gravity.BOTTOM);
+            w.setLayout(FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT);
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            w.setWindowAnimations(R.style.PickerDialogAnim);
+        }
+        dialog.findViewById(R.id.pickImage).setOnClickListener(v -> {
+            dialog.dismiss();
+            launchPicker(true, multiple);
+        });
+        dialog.findViewById(R.id.pickFile).setOnClickListener(v -> {
+            dialog.dismiss();
+            launchPicker(false, multiple);
+        });
+        dialog.setOnCancelListener(d -> {
+            if (fileCallback != null) {
+                fileCallback.onReceiveValue(null);
+                fileCallback = null;
+            }
+        });
+        dialog.show();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,9 +212,11 @@ public class MainActivity extends AppCompatActivity {
         cameraDenied = findViewById(R.id.cameraDenied);
         lastUrl = findViewById(R.id.lastUrl);
         urlInput = findViewById(R.id.urlInput);
+        bottomCard = findViewById(R.id.bottomCard);
         TextView btnCancel = findViewById(R.id.btnCancel);
         TextView btnConnect = findViewById(R.id.btnConnect);
 
+        setupEdgeToEdge();
         setupWebView();
 
         barcodeView.setDecoderFactory(
@@ -113,6 +252,8 @@ public class MainActivity extends AppCompatActivity {
             return true;
         });
         lastUrl.setOnClickListener(v -> connect(prefs.getString(KEY_LAST_URL, "")));
+
+        themeHandler.post(themePoller);
 
         String last = prefs.getString(KEY_LAST_URL, null);
         if (last != null && isValidUrl(last)) {
@@ -166,6 +307,17 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                // WebUI 附件上传：先问传图片还是文件，再调对应选择器
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = callback;
+                boolean multiple = params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+                showPickerDialog(multiple);
+                return true;
+            }
+
+            @Override
             public boolean onCreateWindow(WebView view, boolean isDialog,
                                           boolean isUserGesture, android.os.Message resultMsg) {
                 // RC 登录走 window.open：创建真实的覆盖层弹窗 WebView。
@@ -196,13 +348,11 @@ public class MainActivity extends AppCompatActivity {
                 popup.setWebChromeClient(new WebChromeClient() {
                     @Override
                     public void onCloseWindow(WebView window) {
-                        // 登录成功页 window.close()：关弹窗并重载连接地址（已有登录态）
+                        // 登录成功页 window.close()：只关弹窗。
+                        // 主页面（opener）已通过 postMessage 收到登录令牌，
+                        // 会自行切换到已登录态——重载反而会冲掉它刚收到的内存态
                         webContainer.removeView(popup);
                         popupView = null;
-                        String last = prefs.getString(KEY_LAST_URL, null);
-                        if (last != null && isValidUrl(last)) {
-                            showWeb(last);
-                        }
                     }
                 });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
@@ -226,6 +376,8 @@ public class MainActivity extends AppCompatActivity {
         webView.stopLoading();
         webContainer.setVisibility(View.GONE);
         scanContainer.setVisibility(View.VISIBLE);
+        // 扫码页是 App 自绘界面，系统栏跟随系统主题（而非页面轮询）
+        applySystemBars();
 
         String last = prefs.getString(KEY_LAST_URL, null);
         if (last != null && !last.isEmpty()) {
@@ -269,6 +421,43 @@ public class MainActivity extends AppCompatActivity {
         showWeb(url);
     }
 
+    /** 图片用 image 通配、文件用全类型通配，交系统选择器 */
+    private void launchPicker(boolean image, boolean multiple) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(image ? "image/*" : "*/*");
+        if (multiple) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try {
+            startActivityForResult(intent, REQ_FILE);
+        } catch (Exception e) {
+            if (fileCallback != null) {
+                fileCallback.onReceiveValue(null);
+                fileCallback = null;
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FILE) return;
+        if (fileCallback == null) return;
+        Uri[] results = null;
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int n = data.getClipData().getItemCount();
+                results = new Uri[n];
+                for (int i = 0; i < n; i++) {
+                    results[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                results = new Uri[]{data.getData()};
+            }
+        }
+        fileCallback.onReceiveValue(results);
+        fileCallback = null;
+    }
+
     private boolean isValidUrl(String url) {
         try {
             Uri uri = Uri.parse(url);
@@ -296,7 +485,15 @@ public class MainActivity extends AppCompatActivity {
         if (webContainer.getVisibility() == View.VISIBLE && webView.canGoBack()) {
             webView.goBack();
         } else if (webContainer.getVisibility() == View.VISIBLE) {
-            showScan();
+            // 双击保护：第一次只提示，2 秒内再按才退回连接页，防误触断连
+            long now = System.currentTimeMillis();
+            if (now - lastBackAt < 2000) {
+                lastBackAt = 0;
+                showScan();
+            } else {
+                lastBackAt = now;
+                Toast.makeText(this, R.string.back_hint, Toast.LENGTH_SHORT).show();
+            }
         } else {
             super.onBackPressed();
         }
@@ -318,5 +515,11 @@ public class MainActivity extends AppCompatActivity {
         barcodeView.pause();
         webView.onPause();
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        themeHandler.removeCallbacks(themePoller);
+        super.onDestroy();
     }
 }

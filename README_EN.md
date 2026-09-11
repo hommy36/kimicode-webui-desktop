@@ -22,6 +22,21 @@ Unofficial desktop client for [Kimi Code](https://www.kimi.com/code) — wraps t
 - App UI (top bar / placeholder / remote page) automatically follows the WebUI's light / dark theme
 - UI language follows the system language (Chinese / English; the WebUI itself is controlled by Kimi Code)
 
+## Android client: KimiCode Remote
+
+The `android/` directory contains a companion native Android client (Java + WebView, no third-party frameworks) for using the same WebUI on your phone:
+
+| Dark | Light |
+| --- | --- |
+| ![dark](docs/screenshots/android-dark.jpg) | ![light](docs/screenshots/android-light.jpg) |
+
+- Two connection modes: scan/enter a **direct address** (the `http://IP:port` link from the desktop app's Remote page), or an **official RC link** (`code-rc.kimi.com`, with in-app account sign-in)
+- Remembers the last connection and loads it on launch; falls back to the scanner on failure, double-press back to leave a session
+- Fully immersive: status/navigation bar colors and icons follow the page brightness; the WebUI theme follows the system
+- Custom-drawn scanner (rounded frame), bottom input card, and upload picker (image / file), all in light & dark themes
+
+See `android/README.md` for APK build instructions.
+
 ## Remote access beyond LAN (Tailscale)
 
 Campus and enterprise networks usually isolate clients from each other, so even devices on the same network can't connect. For true remote control over any network (4G, away from home):

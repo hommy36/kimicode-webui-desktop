@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 亮色（默认） -->
+    <color name="page_bg">#f2f3f5</color>
+    <color name="card_bg">#ffffff</color>
+    <color name="input_bg">#eceef0</color>
+    <color name="text_primary">#1f2329</color>
+    <color name="text_secondary">#646a73</color>
+    <color name="text_hint">#8f959e</color>
+    <color name="accent">#1a88ff</color>
+</resources>
