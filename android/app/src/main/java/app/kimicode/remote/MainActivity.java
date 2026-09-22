@@ -80,9 +80,9 @@ public class MainActivity extends AppCompatActivity {
     /** 页面亮暗轮询，用于状态栏/导航栏跟随页面主题 */
     private final Handler themeHandler = new Handler(Looper.getMainLooper());
     private Boolean lastPageLight = null;
-    /** 当前页面是否自带 viewport-fit=cover 安全区适配（是则内容延伸到状态栏下） */
-    private boolean pageCoversTop = false;
     private int sysTop = 0;
+    /** 当前页面是否自己处理顶部安全区（RC 页等 viewport-fit=cover 且无 --safe-top 变量的页面） */
+    private boolean pageSelfManagedTop = false;
     /** 上次按返回键的时间，用于双击返回保护 */
     private long lastBackAt = 0;
 
@@ -95,13 +95,24 @@ public class MainActivity extends AppCompatActivity {
                                 + "var m=c.match(/[\\d.]+/g);var light='';"
                                 + "if(m&&m.length>=3){light=((0.299*+m[0]+0.587*+m[1]+0.114*+m[2])>140)?'1':'0'}"
                                 + "var cover='0';var meta=document.querySelector('meta[name=viewport]');"
-                                + "if(meta&&/viewport-fit\\s*=\\s*cover/.test(meta.content))cover='1';"
-                                + "return light+','+cover}catch(e){return ''}})()",
+                                + "if(meta&&/viewport-fit\\s*=\\s*cover/i.test(meta.content))cover='1';"
+                                // WebUI 的顶部安全区走 CSS 变量 --safe-top（env 运行时无法归零），
+                                // 用 !important 把它清零，顶部留白统一交给原生 padding，
+                                // 否则与原生留白叠加出双额头；文件改动浮层不用该变量，靠原生 padding 即可
+                                + "var hasVar='0';"
+                                + "if(getComputedStyle(document.documentElement).getPropertyValue('--safe-top').trim()!==''){"
+                                + "hasVar='1';"
+                                + "if(!document.getElementById('kr-safe-top-fix')){"
+                                + "var s=document.createElement('style');s.id='kr-safe-top-fix';"
+                                + "s.textContent=':root{--safe-top:0px !important}';"
+                                + "document.head.appendChild(s)}}"
+                                + "return light+','+cover+','+hasVar}catch(e){return ''}})()",
                         v -> {
                             if (v == null || v.length() < 3 || v.charAt(0) != '"') return;
                             String[] parts = v.substring(1, v.length() - 1).split(",");
-                            if (parts.length != 2 || parts[0].isEmpty()) return;
-                            applyPageStyle("1".equals(parts[0]), "1".equals(parts[1]));
+                            if (parts.length != 3 || parts[0].isEmpty()) return;
+                            applyPageStyle("1".equals(parts[0]),
+                                    "1".equals(parts[1]) && !"1".equals(parts[2]));
                         });
             }
             themeHandler.postDelayed(this, 2000);
@@ -113,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
         boolean night = (getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         lastPageLight = null; // 回 WebView 时让轮询重新判定
-        pageCoversTop = false;
+        pageSelfManagedTop = false;
         View root = findViewById(android.R.id.content);
         root.setBackgroundColor(night ? 0xFF16171A : Color.WHITE);
         root.setPadding(0, sysTop, 0, 0);
@@ -132,20 +143,20 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 状态栏透明悬浮，图标颜色跟随页面；页面无 safe-area 适配时加顶部留白 */
-    private void applyPageStyle(boolean light, boolean cover) {
+    /** 状态栏透明悬浮，图标颜色跟随页面；selfManaged 页面（RC 页）自己处理顶部安全区，其余由原生加留白 */
+    private void applyPageStyle(boolean light, boolean selfManaged) {
         View root = findViewById(android.R.id.content);
         lastPageLight = light;
-        pageCoversTop = cover;
+        pageSelfManagedTop = selfManaged;
         root.setBackgroundColor(light ? Color.WHITE : 0xFF16171A);
-        root.setPadding(0, cover ? 0 : sysTop, 0, 0);
+        root.setPadding(0, selfManaged ? 0 : sysTop, 0, 0);
         WindowInsetsControllerCompat c =
                 new WindowInsetsControllerCompat(getWindow(), webView);
         c.setAppearanceLightStatusBars(light);
         c.setAppearanceLightNavigationBars(light);
     }
 
-    /** edge-to-edge：状态栏/导航栏透明，内容可延伸到系统栏下；页面是否自适配由轮询决定 */
+    /** edge-to-edge：状态栏/导航栏透明；顶部留白默认原生加，页面自管理时（RC 页）不加，底部延伸到手势条下 */
     private void setupEdgeToEdge() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
@@ -159,7 +170,7 @@ public class MainActivity extends AppCompatActivity {
                 findViewById(android.R.id.content), (v, insets) -> {
                     Insets sys = insets.getInsets(WindowInsetsCompat.Type.systemBars());
                     sysTop = sys.top;
-                    v.setPadding(0, pageCoversTop ? 0 : sysTop, 0, 0);
+                    v.setPadding(0, pageSelfManagedTop ? 0 : sysTop, 0, 0);
                     float d = getResources().getDisplayMetrics().density;
                     bottomCard.setPadding((int) (20 * d), (int) (20 * d),
                             (int) (20 * d), (int) (20 * d) + sys.bottom);
