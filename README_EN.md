@@ -37,6 +37,10 @@ The `android/` directory contains a companion native Android client (Java + WebV
 
 See `android/README.md` for APK build instructions.
 
+## JetBrains plugin
+
+The `jetbrains/` directory contains a plugin for JetBrains IDEs (CLion / PyCharm / IDEA 2025.2+) that embeds the WebUI in a tool window via JCEF: it attaches to a running `kimi web` service or spawns one rooted at the current project, and the theme follows the IDE. Build and install instructions: `jetbrains/README.md`.
+
 ## Remote access beyond LAN (Tailscale)
 
 Campus and enterprise networks usually isolate clients from each other, so even devices on the same network can't connect. For true remote control over any network (4G, away from home):

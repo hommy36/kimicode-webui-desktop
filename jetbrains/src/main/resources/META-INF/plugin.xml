@@ -1,0 +1,18 @@
+<idea-plugin>
+    <id>app.kimicode.jb</id>
+    <name>KimiCode WebUI</name>
+    <vendor>hommy36</vendor>
+    <description><![CDATA[
+        在 IDE 工具窗口中内嵌 Kimi Code WebUI（JCEF 浏览器）。<br/>
+        自动启动本机 <code>kimi web</code> 服务并接入；若服务已在运行（如桌面版 KimiCode WebUI Desktop）则直接复用。<br/>
+        需要本机已安装 Kimi Code CLI。
+    ]]></description>
+
+    <idea-version since-build="252"/>
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Kimi Code" secondaryName="KimiCode WebUI" anchor="right"
+                    factoryClass="app.kimicode.jb.KimiToolWindowFactory"/>
+    </extensions>
+</idea-plugin>

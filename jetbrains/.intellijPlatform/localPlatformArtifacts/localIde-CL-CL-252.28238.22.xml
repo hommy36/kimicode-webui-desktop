@@ -1,0 +1,10 @@
+<ivy-module version="2.0">
+  <info organisation="localIde" module="CL" revision="CL-252.28238.22"/>
+  <configurations>
+    <conf name="default" visibility="public"/>
+  </configurations>
+  <publications>
+    <artifact name="APP/CLion 2025.2.5" ext="directory" conf="default"/>
+  </publications>
+  <dependencies/>
+</ivy-module>

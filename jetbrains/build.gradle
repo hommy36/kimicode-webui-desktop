@@ -1,0 +1,37 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.intellij.platform' version '2.2.1'
+}
+
+group = 'app.kimicode'
+version = '0.1.0'
+
+repositories {
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    mavenCentral()
+    intellijPlatform { defaultRepositories() }
+}
+
+dependencies {
+    intellijPlatform {
+        // 直接用本机安装的 CLion 作为构建依赖，不下载 IDE 发行包
+        local('D:/APP/CLion 2025.2.5')
+    }
+}
+
+intellijPlatform {
+    pluginConfiguration {
+        ideaVersion { sinceBuild = '252' }
+    }
+    // 本地 IDE 目录已含全部依赖，跳过签名校验与远程解析
+    verifyPlugin { }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

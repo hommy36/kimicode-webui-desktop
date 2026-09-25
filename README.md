@@ -37,6 +37,10 @@
 
 构建 APK 见 `android/README.md`。
 
+## JetBrains 插件
+
+`jetbrains/` 下是 JetBrains IDE 插件（CLion / PyCharm / IDEA 2025.2+），用 JCEF 把 WebUI 内嵌进 IDE 工具窗口：`kimi web` 已在运行时直接接入，否则以当前项目为工作目录自动拉起；主题跟随 IDE 明暗。构建与安装见 `jetbrains/README.md`。
+
 ## 跨网络远程访问（Tailscale）
 
 校园网 / 企业网通常开启客户端隔离，同一网络下设备互不可达。要脱离局域网远程控制（4G、外地）：
