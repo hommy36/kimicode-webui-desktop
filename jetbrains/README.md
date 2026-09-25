@@ -8,6 +8,10 @@
 - **attach-or-spawn**：`kimi web` 已在运行（如桌面版 KimiCode WebUI Desktop）时直接接入，否则以当前项目根目录为 cwd 自动拉起
 - 主题跟随 IDE 明暗设置（写入 WebUI 的 `kimi-web.color-scheme`）
 - 工具栏：刷新（重新接入/拉起服务）、在系统浏览器打开
+- 编辑器右键菜单：
+  - **发送选中代码到 Kimi Code**（Ctrl+Alt+K）：选中代码连同文件路径、行号进入 WebUI 输入框，不自动发送，可继续补充说明
+  - **向 Kimi Code 提问…**（Ctrl+Shift+Alt+K）：弹框输入问题，选中代码自动作为上下文
+- 首次冷启动注入有重试兜底；快捷键与其他插件冲突时可在 IDE Keymap 设置中自行修改
 
 ## 安装
 

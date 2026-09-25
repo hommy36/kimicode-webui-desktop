@@ -39,7 +39,7 @@
 
 ## JetBrains 插件
 
-`jetbrains/` 下是 JetBrains IDE 插件（CLion / PyCharm / IDEA 2025.2+），用 JCEF 把 WebUI 内嵌进 IDE 工具窗口：`kimi web` 已在运行时直接接入，否则以当前项目为工作目录自动拉起；主题跟随 IDE 明暗。构建与安装见 `jetbrains/README.md`。
+`jetbrains/` 下是 JetBrains IDE 插件（CLion / PyCharm / IDEA 2025.2+），用 JCEF 把 WebUI 内嵌进 IDE 工具窗口：`kimi web` 已在运行时直接接入，否则以当前项目为工作目录自动拉起；主题跟随 IDE 明暗。编辑器右键可直接把选中代码（含路径行号）发到对话输入框，或带着选区提问。构建与安装见 `jetbrains/README.md`。
 
 ## 跨网络远程访问（Tailscale）
 

@@ -28,6 +28,7 @@ public final class KimiToolWindowFactory implements ToolWindowFactory, DumbAware
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         JBCefBrowser browser = new JBCefBrowser();
         KimiServerService server = KimiServerService.getInstance(project);
+        KimiBrowserHolder.set(project, browser);
         ThemeSync.attach(browser, project);
 
         toolWindow.getContentManager().addContent(

@@ -39,7 +39,7 @@ See `android/README.md` for APK build instructions.
 
 ## JetBrains plugin
 
-The `jetbrains/` directory contains a plugin for JetBrains IDEs (CLion / PyCharm / IDEA 2025.2+) that embeds the WebUI in a tool window via JCEF: it attaches to a running `kimi web` service or spawns one rooted at the current project, and the theme follows the IDE. Build and install instructions: `jetbrains/README.md`.
+The `jetbrains/` directory contains a plugin for JetBrains IDEs (CLion / PyCharm / IDEA 2025.2+) that embeds the WebUI in a tool window via JCEF: it attaches to a running `kimi web` service or spawns one rooted at the current project, and the theme follows the IDE. Editor context-menu actions send the selected code (with path and line numbers) to the chat input or ask a question with the selection as context. Build and install instructions: `jetbrains/README.md`.
 
 ## Remote access beyond LAN (Tailscale)
 

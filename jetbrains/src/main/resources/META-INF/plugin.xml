@@ -16,4 +16,17 @@
                     icon="/icons/toolwindow.svg"
                     factoryClass="app.kimicode.jb.KimiToolWindowFactory"/>
     </extensions>
+
+    <actions>
+        <action id="KimiCode.SendSelection" class="app.kimicode.jb.action.SendSelectionToKimiAction"
+                text="发送选中代码到 Kimi Code" icon="/icons/toolwindow.svg">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt K"/>
+        </action>
+        <action id="KimiCode.Ask" class="app.kimicode.jb.action.AskKimiAction"
+                text="向 Kimi Code 提问…" icon="/icons/toolwindow.svg">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift alt K"/>
+        </action>
+    </actions>
 </idea-plugin>
