@@ -44,7 +44,8 @@ public final class KimiToolWindowFactory implements ToolWindowFactory, DumbAware
                         server.invalidate();
                         String url = server.ensureServer();
                         currentUrl[0] = url;
-                        ApplicationManager.getApplication().invokeLater(() -> browser.loadURL(url));
+                        ApplicationManager.getApplication().invokeLater(() ->
+                                loadWithRetry(browser, url));
                     } catch (Exception e) {
                         ApplicationManager.getApplication().invokeLater(() ->
                                 browser.loadHTML(statusPage("启动失败：" + e.getMessage())));
@@ -75,6 +76,31 @@ public final class KimiToolWindowFactory implements ToolWindowFactory, DumbAware
                 }));
 
         start.run();
+    }
+
+    /**
+     * 导航 + 看门狗：JCEF 浏览器组件刚创建时会吞掉 loadURL（首次打开卡在占位页的原因），
+     * 发出导航后轮询实际地址，没生效就补发，最多 10 次。
+     */
+    private static void loadWithRetry(JBCefBrowser browser, String url) {
+        String expect = url.contains("#") ? url.substring(0, url.indexOf('#')) : url;
+        browser.loadURL(url);
+        int[] left = {10};
+        javax.swing.Timer timer = new javax.swing.Timer(1500, null);
+        timer.addActionListener(e -> {
+            String cur = browser.getCefBrowser().getURL();
+            if (cur != null && cur.startsWith(expect)) {
+                timer.stop();
+                return;
+            }
+            if (--left[0] > 0) {
+                browser.loadURL(url);
+            } else {
+                timer.stop();
+            }
+        });
+        timer.setRepeats(true);
+        timer.start();
     }
 
     /** 加载中的占位页 / 错误页，配色跟随 IDE 明暗 */
