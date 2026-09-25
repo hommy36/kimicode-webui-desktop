@@ -13,6 +13,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Kimi Code" secondaryName="KimiCode WebUI" anchor="right"
+                    icon="/icons/toolwindow.svg"
                     factoryClass="app.kimicode.jb.KimiToolWindowFactory"/>
     </extensions>
 </idea-plugin>
