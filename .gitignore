@@ -8,3 +8,4 @@ android/.gradle-dist/
 android/.jdk/
 android/app/build/
 android/local.properties
+tools/cliproxyapi/
